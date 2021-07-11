@@ -1,0 +1,2 @@
+data/plot_chapter19.txt filter=lfs diff=lfs merge=lfs -text
+data/plot_chapter2.txt filter=lfs diff=lfs merge=lfs -text
