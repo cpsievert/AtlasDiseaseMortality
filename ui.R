@@ -1,13 +1,5 @@
-#
-# This is the user-interface definition of a Shiny web application. You can
-# run the application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
+library(bslib)
 library(shinyWidgets)
 library(dplyr)
 library(plotly)
@@ -17,10 +9,19 @@ library(shinyalert)
 library(DT)
 library(htmltools)
 
-# shinyUI(fluidPage(
-fixedPage(
+plotlyOutput2 <- function(..., height = 550) {
+  plotlyOutput(..., height = height)
+}
 
-  # Application title
+h6 <- function(...) {
+  tags$p(class = "lead", style = "font-size:0.85rem", ...)
+}
+
+fixedPage(
+  theme = bs_theme(
+    version = 4,
+    base_font = font_google("Roboto Slab", wght = c(300, 400))
+  ),
   titlePanel("Atlas of Disease Mortality (beta version)"),
   useShinyjs(),
   useShinyalert(),
@@ -50,8 +51,8 @@ fixedPage(
           )
         )
       ),
-      tabsetPanel(
-        type = "tabs",
+      bslib::navs_tab_card(
+
         tabPanel(
           "Summary of several disorders",
           hr(),
@@ -98,8 +99,7 @@ fixedPage(
             ),
             div(
               id = "MRRLYL_all999_show",
-              htmlOutput("Carson7"),
-              plotOutput("MRR_LYL_all999"),
+              plotlyOutput2("MRR_LYL_all999"),
               h6("This figures show the following estimates for the selected disorders: (i) the number of individuals living in Denmark in 2000-2018 and diagnosed in a
                                                           hospital during 1995-2018; (ii) mortality rate ratios for the selected sex and selected cause of death comparing those diagnosed with those not diagnosed with each specific
                                                               disorder; and (iii)
@@ -114,7 +114,7 @@ fixedPage(
             ),
             hidden(div(
               id = "MRR_all999_show",
-              plotOutput("MRR_all999"),
+              plotlyOutput2("MRR_all999"),
               h6("Mortality rate ratios for the selected sex and selected cause of death comparing those diagnosed with those not diagnosed with each specific
                                                                      disorder for the selected disorders Estimates are available for disorders with at least 100 individuals diagnosed and at least 20 deaths.")
             )),
@@ -124,7 +124,7 @@ fixedPage(
             ),
             hidden(div(
               id = "LYL_all999_show",
-              plotOutput("LYL_all999"),
+              plotlyOutput2("LYL_all999"),
               h6("Average Life Years Lost after diagnosis (difference in remaining life expectancy between those diagnosed and the age- and sex-matched
                                                                      general Danish population). Estimates available for disorders with at least 100 individuals diagnosed and at least 20 deaths, as long as there are enough diagnosed
                                                                      individuals at older ages of follow-up (the survival probability must be lower than 10% when there are less than 10 diagnosed individuals at risk).")
@@ -135,7 +135,7 @@ fixedPage(
             ),
             hidden(div(
               id = "air_all999_show",
-              plotOutput("MRR_air_plot999"),
+              plotlyOutput2("MRR_air_plot999"),
               h6("Mortality rate ratios for all causes and both sexes combined comparing those diagnosed with those not diagnosed with each specific
                                                                      disorder for the selected disorders. One estimate is adjusted for air pollution, while the other is not (all estimates are adjusted
                                                                      for age, sex, and calendar time). Estimates are available for disorders with at least 100 individuals diagnosed and at least 20 deaths.")
@@ -195,10 +195,9 @@ fixedPage(
             ),
             hidden(div(
               id = "agedx999_show",
-              htmlOutput("Carson2"),
-              plotOutput("incidence999"),
+              plotlyOutput2("incidence999", height = 300),
               htmlOutput("text_agedx999"),
-              plotOutput("ages999"),
+              plotlyOutput2("ages999", height = 300),
               materialSwitch(
                 inputId = "smooth999",
                 label = "Smoothed estimates of age of diagnosis",
@@ -216,10 +215,9 @@ fixedPage(
             ),
             hidden(div(
               id = "agedeath999_show",
-              htmlOutput("Carson3"),
-              plotOutput("mortality999"),
+              plotlyOutput2("mortality999", height = 300),
               htmlOutput("text_agedeath999"),
-              plotOutput("ages_death999"),
+              plotlyOutput2("ages_death999", height = 300),
               materialSwitch(
                 inputId = "smooth_death999",
                 label = "Smoothed estimates of age of death",
@@ -237,8 +235,7 @@ fixedPage(
             ),
             hidden(div(
               id = "lagged999_show",
-              htmlOutput("Carson4"),
-              plotOutput("MRRlagged999"),
+              plotlyOutput2("MRRlagged999", height = 300),
               htmlOutput("text_MRRlagged999"),
               hr()
             )),
@@ -248,8 +245,7 @@ fixedPage(
             ),
             hidden(div(
               id = "LYLages999_show",
-              htmlOutput("Carson5"),
-              plotOutput("LYLages999"),
+              plotlyOutput2("LYLages999", height = 300),
               htmlOutput("text_LYLages999"),
               hr()
             )),
@@ -310,8 +306,7 @@ fixedPage(
                   ))
                 )
               ),
-              htmlOutput("Carson6"),
-              plotOutput("LYLplot999"),
+              plotlyOutput2("LYLplot999"),
               htmlOutput("text_survival999"),
               hr()
             )),
@@ -379,7 +374,7 @@ fixedPage(
             ),
             div(
               id = "MRRLYL_all_show",
-              plotOutput("MRR_LYL_all"),
+              plotlyOutput2("MRR_LYL_all"),
               h6("This figures show the following estimates for the selected ICD-10 chapters: (i) the number of individuals living in Denmark in 2000-2018 and diagnosed in a
                                                           hospital during 1995-2018; (ii) mortality rate ratios for the selected sex and selected cause of death comparing those diagnosed with those not diagnosed with disorders in each specific
                                                               chapter; and (iii)
@@ -394,7 +389,7 @@ fixedPage(
             ),
             hidden(div(
               id = "MRR_all_show",
-              plotOutput("MRR_all"),
+              plotlyOutput2("MRR_all"),
               h6("Mortality rate ratios for the selected sex and selected cause of death comparing those diagnosed with those not diagnosed with each specific
                 ICD-10 chapter (left figure) and disorder (right figure). Estimates are available for disorders with at least 100 individuals diagnosed and at least 20 deaths.")
             )),
@@ -404,7 +399,7 @@ fixedPage(
             ),
             hidden(div(
               id = "LYL_all_show",
-              plotOutput("LYL_all"),
+              plotlyOutput2("LYL_all"),
               h6("Average Life Years Lost after diagnosis (difference in remaining life expectancy between those diagnosed and the age- and sex-matched
                 general Danish population) for those diagnosed with each specific ICD-10 chapter (left figure) and disorder (right figure). Estimates available for disorders with at least 100 individuals diagnosed and at least 20 deaths, as long as there are enough diagnosed
                                                                      individuals at older ages of follow-up (the survival probability must be lower than 10% when there are less than 10 diagnosed individuals at risk).")
@@ -415,7 +410,7 @@ fixedPage(
             ),
             hidden(div(
               id = "air_all_show",
-              plotOutput("MRR_air_plot"),
+              plotlyOutput2("MRR_air_plot"),
               # materialSwitch(
               #   inputId = "air_plot_CIs",
               #   label = "Confidence intervals for the ratio of MRRs",
@@ -484,9 +479,9 @@ fixedPage(
             ),
             hidden(div(
               id = "agedx_show",
-              plotOutput("incidence"),
+              plotlyOutput2("incidence", height = 300),
               htmlOutput("text_agedx"),
-              plotOutput("ages"),
+              plotlyOutput2("ages", height = 300),
               materialSwitch(
                 inputId = "smooth",
                 label = "Smoothed estimates of age of diagnosis",
@@ -504,9 +499,9 @@ fixedPage(
             ),
             hidden(div(
               id = "agedeath_show",
-              plotOutput("mortality"),
+              plotlyOutput2("mortality", height = 300),
               htmlOutput("text_agedeath"),
-              plotOutput("ages_death"),
+              plotlyOutput2("ages_death", height = 300),
               materialSwitch(
                 inputId = "smooth_death",
                 label = "Smoothed estimates of age of death",
@@ -524,7 +519,7 @@ fixedPage(
             ),
             hidden(div(
               id = "lagged_show",
-              plotOutput("MRRlagged"),
+              plotlyOutput2("MRRlagged", height = 300),
               htmlOutput("text_MRRlagged"),
               hr()
             )),
@@ -534,7 +529,7 @@ fixedPage(
             ),
             hidden(div(
               id = "LYLages_show",
-              plotOutput("LYLages"),
+              plotlyOutput2("LYLages", height = 300),
               htmlOutput("text_LYLages"),
               hr()
             )),
@@ -593,7 +588,7 @@ fixedPage(
                   ))
                 )
               ),
-              plotOutput("LYLplot"),
+              plotlyOutput2("LYLplot"),
               htmlOutput("text_survival"),
               hr()
             )),

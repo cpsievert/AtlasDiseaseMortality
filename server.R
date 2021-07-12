@@ -1,12 +1,3 @@
-#
-# This is the server logic of a Shiny web application. You can run the
-# application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
 library(dplyr)
 library(ggplot2)
@@ -20,8 +11,17 @@ library(htmltools)
 
 source("R/AuxFunctions.R", local = TRUE)
 
+theme_set(theme_bw(base_family = "Roboto Slab"))
+thematic::thematic_shiny(font = "Roboto Slab")
+
+read_table <- function(file, ...) {
+  as.data.frame(
+    data.table::fread(file = file, sep = " ", header = TRUE, ...)
+  )
+}
+
 # Load list of diseases
-list_dx <- read.table(file = "data/list_dx.txt", header = T)
+list_dx <- read_table("data/list_dx.txt")
 list_dx <- list_dx %>%
   arrange(chapter, start, level) %>%
   mutate(
@@ -34,65 +34,44 @@ list_dx <- list_dx %>%
       substr(level, 1, 1) == "2" ~ paste0(" -> ", start, "-", end, ": ", desc_EN),
       TRUE ~ desc_EN
     ),
-    dx_median = ifelse(is.na(age_dx50), "-", paste0(format_numbers(age_dx50, 1), " (", format_numbers(age_dx25, 1), "-", format_numbers(age_dx75, 1), ")")),
-    death_median = ifelse(is.na(age_death50), "-", paste0(format_numbers(age_death50, 1), " (", format_numbers(age_death25, 1), "-", format_numbers(age_death75, 1), ")"))
+    dx_median = ifelse(
+      is.na(age_dx50), "-", paste0(format_numbers(age_dx50, 1), " (", format_numbers(age_dx25, 1), "-", format_numbers(age_dx75, 1), ")")),
+    death_median = ifelse(
+      is.na(age_death50), "-", paste0(format_numbers(age_death50, 1), " (", format_numbers(age_death25, 1), "-", format_numbers(age_death75, 1), ")"))
   )
 list_unique <- unique(list_dx[!(list_dx$chapter %in% c(998, 999)), c("id", "description")])
 list_unique999 <- unique(list_dx[list_dx$chapter %in% c(998, 999), c("id", "description")] %>% arrange(id))
 chapters_unique <- unique(list_dx[list_dx$level == 1, c("id", "description", "chapter", "start", "end")])
 
-ages <- read.table(file = "data/ages.txt", header = T)
+ages <- read_table("data/ages.txt")
 
-incidence <- read.table(file = "data/incidence.txt", header = T)
+incidence <- read_table("data/incidence.txt")
 
-MRR <- read.table(file = "data/MRR.txt", header = T) %>%
+
+MRR <- read_table("data/MRR.txt") %>%
   mutate(
     rate = format_numbers(1000 * rate, 2),
     rateDK_std = format_numbers(1000 * rate_DK_std, 2),
-    MRR = ifelse(is.na(HR), "-", paste0(format_numbers(HR, 2), " (", format_numbers(CI_left, 2), "-", format_numbers(CI_right, 2), ")")),
-    MRR_95CI = ifelse(is.na(HR), "-", paste0(format_numbers(HR, 2), " (95% CI: ", format_numbers(CI_left, 2), "-", format_numbers(CI_right, 2), ")"))
+    MRR = format_ci(HR, CI_left, CI_right, n = 2),
+    MRR_95CI = format_ci(HR, CI_left, CI_right, n = 2, prefix = "95% CI: ")
   )
 
-LYL <- read.table(file = "data/LYL.txt", header = T) %>%
+LYL <- read_table("data/LYL.txt") %>%
   mutate(
-    Total = case_when(
-      is.na(LYL_Total) ~ "-",
-      !is.na(LYL_Total) & is.na(LYL_Total_L) ~ as.character(format_numbers(LYL_Total, 2)),
-      !is.na(LYL_Total) & !is.na(LYL_Total_L) ~ paste0(format_numbers(LYL_Total, 2), " (", format_numbers(LYL_Total_L, 2), "-", format_numbers(LYL_Total_R, 2), ")")
-    ),
-    Total_95CI = case_when(
-      is.na(LYL_Total) ~ "-",
-      !is.na(LYL_Total) & is.na(LYL_Total_L) ~ as.character(format_numbers(LYL_Total, 2)),
-      !is.na(LYL_Total) & !is.na(LYL_Total_L) ~ paste0(format_numbers(LYL_Total, 2), " (95% CI: ", format_numbers(LYL_Total_L, 2), "-", format_numbers(LYL_Total_R, 2), ")")
-    ),
-    Natural = case_when(
-      is.na(LYL_Natural) ~ "-",
-      !is.na(LYL_Natural) & is.na(LYL_Natural_L) ~ as.character(format_numbers(LYL_Natural, 2)),
-      !is.na(LYL_Natural) & !is.na(LYL_Natural_L) ~ paste0(format_numbers(LYL_Natural, 2), " (", format_numbers(LYL_Natural_L, 2), "-", format_numbers(LYL_Natural_R, 2), ")")
-    ),
-    Natural_95CI = case_when(
-      is.na(LYL_Natural) ~ "-",
-      !is.na(LYL_Natural) & is.na(LYL_Natural_L) ~ as.character(format_numbers(LYL_Natural, 2)),
-      !is.na(LYL_Natural) & !is.na(LYL_Natural_L) ~ paste0(format_numbers(LYL_Natural, 2), " (95% CI: ", format_numbers(LYL_Natural_L, 2), "-", format_numbers(LYL_Natural_R, 2), ")")
-    ),
-    External = case_when(
-      is.na(LYL_External) ~ "-",
-      !is.na(LYL_External) & is.na(LYL_External_L) ~ as.character(format_numbers(LYL_External, 2)),
-      !is.na(LYL_External) & !is.na(LYL_External_L) ~ paste0(format_numbers(LYL_External, 2), " (", format_numbers(LYL_External_L, 2), "-", format_numbers(LYL_External_R, 2), ")")
-    ),
-    External_95CI = case_when(
-      is.na(LYL_External) ~ "-",
-      !is.na(LYL_External) & is.na(LYL_External_L) ~ as.character(format_numbers(LYL_External, 2)),
-      !is.na(LYL_External) & !is.na(LYL_External_L) ~ paste0(format_numbers(LYL_External, 2), " (95% CI: ", format_numbers(LYL_External_L, 2), "-", format_numbers(LYL_External_R, 2), ")")
-    )
+    Total = format_ci(LYL_Total, LYL_Total_L, LYL_Total_R, n = 2),
+    Total_95CI = format_ci(LYL_Total, LYL_Total_L, LYL_Total_R, n = 2, prefix = "95% CI: "),
+    Natural = format_ci(LYL_Natural, LYL_Natural_L, LYL_Natural_R, n = 2),
+    Natural_95CI = format_ci(LYL_Natural, LYL_Natural_L, LYL_Natural_R, n = 2, prefix = "95% CI: "),
+    External = format_ci(LYL_External, LYL_External_L, LYL_External_R, n = 2),
+    External_95CI = format_ci(LYL_External, LYL_External_L, LYL_External_R, n = 2, prefix = "95% CI: ")
   )
 
-
-
-LYLages <- read.table(file = "data/LYLages.txt", header = T)
-MRRlagged <- read.table(file = "data/MRRlagged.txt", header = T)
-MRRage <- read.table(file = "data/MRRage.txt", header = T) %>%
-  mutate(age_cat = paste0(age_group, "-", age_group + age_categories))
+LYLages <- read_table("data/LYLages.txt")
+MRRlagged <- read_table("data/MRRlagged.txt")
+MRRage <- read_table("data/MRRage.txt") %>%
+  mutate(
+    age_cat = paste0(age_group, "-", age_group + age_categories)
+  )
 
 
 pd <- ggstance::position_dodgev(height = 0.5)
@@ -107,31 +86,6 @@ function(input, output, session) {
     and display if you hover the mouse over NA estimates")
   })
 
-  output$Carson2 <- renderText({
-    HTML("<div style='color:#FF0000'>", "Carson: It would be ideal here if specific estimates could be shown when hovering (point estimate and 95% CI)")
-  })
-
-  output$Carson3 <- renderText({
-    HTML("<div style='color:#FF0000'>", "Carson: It would be ideal here if specific estimates could be shown when hovering a specific age (point estimate and 95% CI) for both the diagnosed and general population")
-  })
-
-  output$Carson4 <- renderText({
-    HTML("<div style='color:#FF0000'>", "Carson: It would be ideal here if specific estimates could be shown when hovering (point estimate and 95% CI)")
-  })
-
-  output$Carson5 <- renderText({
-    HTML("<div style='color:#FF0000'>", "Carson: It would be ideal here if specific estimates could be shown when hovering a specific age (point estimate and 95% CI) for both the diagnosed and general population")
-  })
-
-  output$Carson6 <- renderText({
-    HTML("<div style='color:#FF0000'>", "Carson: It would be ideal to add text when you hover across the x-axis (i.e. at specific ages) providing the corresponding proportion alive/dead at this age.")
-  })
-
-
-  output$Carson7 <- renderText({
-    HTML("<div style='color:#FF0000'>", "Carson: It would be ideal to add text when you hover across each estimate: diagnosis, N, MRR, and LYL. This applies to all 4 figures below")
-  })
-
 
   ###################
   ###################
@@ -139,87 +93,87 @@ function(input, output, session) {
 
   ### For list of GMCs (chapters 998 and 999)
   observeEvent(input$broad_selected999,
-    {
-      x <- input$broad_selected999
-      list <- data.frame()
+               {
+                 x <- input$broad_selected999
+                 list <- data.frame()
 
-      if ("Broad 10 categories of disorders" %in% x) {
-        list <- list %>%
-          bind_rows(list_unique999 %>% filter(id %in% (id_broad))) %>%
-          distinct()
-      }
+                 if ("Broad 10 categories of disorders" %in% x) {
+                   list <- list %>%
+                     bind_rows(list_unique999 %>% filter(id %in% (id_broad))) %>%
+                     distinct()
+                 }
 
-      if ("Specific 31 disorders" %in% x) {
-        list <- list %>%
-          bind_rows(list_unique999 %>% filter(id %in% (id_specific))) %>%
-          distinct()
-        if ("Broad 10 categories of disorders" %in% x) {
-          list <- list %>%
-            mutate(
-              description = ifelse(id %in% id_specific & !(id %in% id_broad), paste0("- ", description), description)
-            )
-        }
-      }
+                 if ("Specific 31 disorders" %in% x) {
+                   list <- list %>%
+                     bind_rows(list_unique999 %>% filter(id %in% (id_specific))) %>%
+                     distinct()
+                   if ("Broad 10 categories of disorders" %in% x) {
+                     list <- list %>%
+                       mutate(
+                         description = ifelse(id %in% id_specific & !(id %in% id_broad), paste0("- ", description), description)
+                       )
+                   }
+                 }
 
-      if ("Additional 50 disorders" %in% x) {
-        y <- list_unique999 %>% filter(id %in% (id_additional))
-        if (nrow(list > 0)) {
-          y <- y %>%
-            mutate(description = paste0("Additional: ", description))
-        }
-        list <- list %>% bind_rows(y)
-      }
+                 if ("Additional 50 disorders" %in% x) {
+                   y <- list_unique999 %>% filter(id %in% (id_additional))
+                   if (nrow(list > 0)) {
+                     y <- y %>%
+                       mutate(description = paste0("Additional: ", description))
+                   }
+                   list <- list %>% bind_rows(y)
+                 }
 
-      list <- list %>% arrange(id)
+                 list <- list %>% arrange(id)
 
-      # Keep the selected disorder if still available
-      selected <- "--> Choose disorder of interest"
+                 # Keep the selected disorder if still available
+                 selected <- "--> Choose disorder of interest"
 
-      if (!is.null(x)) {
-        dx_selected <- list$description[gsub("- ", "", gsub("Additional: ", "", list$description)) == gsub("- ", "", gsub("Additional: ", "", input$dx_interest999))]
+                 if (!is.null(x)) {
+                   dx_selected <- list$description[gsub("- ", "", gsub("Additional: ", "", list$description)) == gsub("- ", "", gsub("Additional: ", "", input$dx_interest999))]
 
-        if (length(dx_selected) > 0) {
-          selected <- dx_selected
-        }
+                   if (length(dx_selected) > 0) {
+                     selected <- dx_selected
+                   }
 
-        updatePickerInput(session,
-          inputId = "dx_interest999",
-          choices = c("--> Choose disorder of interest", list$description),
-          selected = selected
-        )
-      } else {
-        updatePickerInput(session,
-          inputId = "dx_interest999",
-          choices = "--> Choose disorder of interest",
-          selected = "--> Choose disorder of interest"
-        )
-      }
+                   updatePickerInput(session,
+                                     inputId = "dx_interest999",
+                                     choices = c("--> Choose disorder of interest", list$description),
+                                     selected = selected
+                   )
+                 } else {
+                   updatePickerInput(session,
+                                     inputId = "dx_interest999",
+                                     choices = "--> Choose disorder of interest",
+                                     selected = "--> Choose disorder of interest"
+                   )
+                 }
 
 
 
-      # Keep the selected disorders if still available
-      selected <- list$description
+                 # Keep the selected disorders if still available
+                 selected <- list$description
 
-      if (!is.null(x)) {
-        dx_selected <- list$description[gsub("- ", "", gsub("Additional: ", "", list$description)) %in% gsub("- ", "", gsub("Additional: ", "", input$diseases_all999))]
+                 if (!is.null(x)) {
+                   dx_selected <- list$description[gsub("- ", "", gsub("Additional: ", "", list$description)) %in% gsub("- ", "", gsub("Additional: ", "", input$diseases_all999))]
 
-        if (length(dx_selected) > 0) {
-          selected <- dx_selected
-        }
-        updatePickerInput(session,
-          inputId = "diseases_all999",
-          choices = list$description,
-          selected = selected
-        )
-      } else {
-        updatePickerInput(session,
-          inputId = "diseases_all999",
-          choices = "",
-          selected = NULL
-        )
-      }
-    },
-    ignoreNULL = FALSE
+                   if (length(dx_selected) > 0) {
+                     selected <- dx_selected
+                   }
+                   updatePickerInput(session,
+                                     inputId = "diseases_all999",
+                                     choices = list$description,
+                                     selected = selected
+                   )
+                 } else {
+                   updatePickerInput(session,
+                                     inputId = "diseases_all999",
+                                     choices = "",
+                                     selected = NULL
+                   )
+                 }
+               },
+               ignoreNULL = FALSE
   )
 
   observeEvent(input$dx_interest999, {
@@ -248,27 +202,18 @@ function(input, output, session) {
     )
   })
 
-  # output$list999 <- renderTable({
-  #   table_main(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
-  # }, caption = "<b><u>Estimates not available:</u> Age at diagnosis</b> if 'Diagnosed<100'; <b>Age at death</b> if 'Deaths<100'; <b>Mortality rate ratio</b> if
-  # 'Diagnosed<100' or 'Deaths<20'; <b>Life years lost</b> if 'Diagnosed<100', 'Deaths<20' or not enough individuals at risk
-  # at old ages; <b>Life years lost</b> for persons if not available for both males and females. A range for <b>Diagnosed</b> and <b>Deaths</b> is provided
-  # when less than 5 individuals could be identified.")
-
-
   output$list999 <- renderDataTable({
-    datatable(table_main(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999))),
+    datatable(
+      table_main(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999))),
       options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
       rownames = FALSE,
       caption = htmltools::tags$caption(
-        style = "caption-side: bottom;", htmltools::strong("Estimates not available: Age at diagnosis"), " if 'Diagnosed<100'; ", htmltools::strong("Age at death"), " if 'Deaths<100'; ", htmltools::strong("Mortality rate ratio"), " if
-                'Diagnosed<100' or 'Deaths<20'; ", htmltools::strong("Life years lost"), " if 'Diagnosed<100', 'Deaths<20' or not enough individuals at risk
+        style = "caption-side: bottom;", htmltools::strong("Estimates not available: Age at diagnosis"), " if 'Diagnosed<100'; ", htmltools::strong("Age at death"), " if 'Deaths<100'; ", htmltools::strong("Mortality rate ratio"), " if 'Diagnosed<100' or 'Deaths<20'; ", htmltools::strong("Life years lost"), " if 'Diagnosed<100', 'Deaths<20' or not enough individuals at risk
                 at old ages; ", htmltools::strong("Life years lost"), " for persons if not available for both males and females. A range for ", htmltools::strong("Diagnosed"), " and ", htmltools::strong("Deaths"), " is provided
                 when less than 5 individuals could be identified."
       )
     )
   })
-
 
   ### Age-specific incidences
   observeEvent(input$button_agedx999, {
@@ -278,11 +223,11 @@ function(input, output, session) {
     )
   })
 
-  output$incidence999 <- renderPlot({
+  output$incidence999 <- renderPlotly({
     plot_incidence(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
   })
 
-  output$ages999 <- renderPlot({
+  output$ages999 <- renderPlotly({
     plot_age_dx(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)), smooth = input$smooth999)
   })
 
@@ -295,11 +240,11 @@ function(input, output, session) {
     )
   })
 
-  output$mortality999 <- renderPlot({
+  output$mortality999 <- renderPlotly({
     plot_mortality(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
   })
 
-  output$ages_death999 <- renderPlot({
+  output$ages_death999 <- renderPlotly({
     plot_age_death(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)), smooth = input$smooth_death999)
   })
 
@@ -312,11 +257,11 @@ function(input, output, session) {
     )
   })
 
-  output$MRRlagged999 <- renderPlot({
+  output$MRRlagged999 <- renderPlotly({
     plot_MRRlagged(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
   })
 
-  output$MRRlagged <- renderPlot({
+  output$MRRlagged <- renderPlotly({
     plot_MRRlagged(dx = input$dx_interest)
   })
 
@@ -328,7 +273,7 @@ function(input, output, session) {
     )
   })
 
-  output$LYLages999 <- renderPlot({
+  output$LYLages999 <- renderPlotly({
     plot_LYLages(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
   })
 
@@ -340,22 +285,13 @@ function(input, output, session) {
     )
   })
 
-  # output$MRR999 <- renderTable({
-  #   table_causesMRR(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
-  # })
-  #
-  # output$LYL999 <- renderTable({
-  #   table_causesLYL(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
-  # })
-
   #  output$MRR_LYL_causes999 <- renderTable({
   output$MRR_LYL_causes999 <- renderDataTable({
     datatable(table_causes(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999))),
-      options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
-      rownames = FALSE, container = causes_structure(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
+              options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
+              rownames = FALSE, container = causes_structure(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
     )
   })
-
 
 
   ### Survival curves
@@ -371,7 +307,8 @@ function(input, output, session) {
       filter(description == gsub("- ", "", gsub("Additional: ", "", !!input$dx_interest999)), LYL == TRUE) %>%
       slice(1)
 
-    updateRadioGroupButtons(session,
+    updateRadioGroupButtons(
+      session,
       inputId = "age_survival999",
       choices = c(
         paste0("P25: ", x[1, "p25"], " years"),
@@ -383,23 +320,14 @@ function(input, output, session) {
     )
   })
 
-  check_plot999 <- reactive({
-    list(input$dx_interest999, input$age_survival999, input$cause_survival999)
-  })
-  observeEvent(check_plot999(), {
-    LYL_plot <- plot_LYLplot(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)), age = input$age_survival999, cause = input$cause_survival999)
-
-    output$LYLplot999 <- renderPlot({
-      LYL_plot$g
-    })
-
-    output$text_survival999 <- renderText({
-      LYL_plot$text
-    })
+  output$LYLplot999 <- renderPlotly({
+    res <- plot_LYLplot(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)), age = input$age_survival999, cause = input$cause_survival999)
+    text_survival999 <<- res$text
+    res$g
   })
 
-
-
+  text_survival999 <- NULL
+  output$text_survival999 <- renderText(text_survival999)
 
   ### Air pollution
   observeEvent(input$button_air999, {
@@ -409,14 +337,10 @@ function(input, output, session) {
     )
   })
 
-  # output$MRR_air999 <- renderTable({
-  #   table_MRRair(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
-  # })
-
   output$MRR_air999 <- renderDataTable({
     datatable(table_MRRair(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999))),
-      options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
-      rownames = FALSE, container = MRRair_structure
+              options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
+              rownames = FALSE, container = MRRair_structure
     )
   })
 
@@ -424,27 +348,25 @@ function(input, output, session) {
   ###################
   ###################
   ### GMCs: all disorders
-
-
   observeEvent(input$diseases_all999,
-    {
-      if (is.null(input$diseases_all999)) {
-        shinyjs::hide(id = "main_panel_all999")
-        shinyjs::disable(id = "sex999")
-        shinyjs::disable(id = "cod999")
-      } else {
-        if ("" %in% input$diseases_all999) {
-          shinyjs::hide(id = "main_panel_all999")
-          shinyjs::disable(id = "sex999")
-          shinyjs::disable(id = "cod999")
-        } else {
-          shinyjs::show(id = "main_panel_all999")
-          shinyjs::enable(id = "sex999")
-          shinyjs::enable(id = "cod999")
-        }
-      }
-    },
-    ignoreNULL = FALSE
+               {
+                 if (is.null(input$diseases_all999)) {
+                   shinyjs::hide(id = "main_panel_all999")
+                   shinyjs::disable(id = "sex999")
+                   shinyjs::disable(id = "cod999")
+                 } else {
+                   if ("" %in% input$diseases_all999) {
+                     shinyjs::hide(id = "main_panel_all999")
+                     shinyjs::disable(id = "sex999")
+                     shinyjs::disable(id = "cod999")
+                   } else {
+                     shinyjs::show(id = "main_panel_all999")
+                     shinyjs::enable(id = "sex999")
+                     shinyjs::enable(id = "cod999")
+                   }
+                 }
+               },
+               ignoreNULL = FALSE
   )
 
 
@@ -490,37 +412,34 @@ function(input, output, session) {
         pos = factor(id, levels = rev(labels$id), labels = rev(labels$description))
       )
 
-    output$MRR_LYL_all999 <- renderPlot({
+    output$MRR_LYL_all999 <- renderPlotly({
       plot_all(
         dx = x, sex = sex, causes = input$cod999, list_dx_included = input$diseases_all999,
         list_clean = gsub("- ", "", gsub("Additional: ", "", input$diseases_all999))
       )
     })
 
-    output$MRR_all999 <- renderPlot({
+    output$MRR_all999 <- renderPlotly({
       plot_mrr_all(
         dx = x, sex = sex, causes = input$cod999, list_dx_included = input$diseases_all999,
         list_clean = gsub("- ", "", gsub("Additional: ", "", input$diseases_all999))
       )
     })
 
-    output$LYL_all999 <- renderPlot({
+    output$LYL_all999 <- renderPlotly({
       plot_lyl_all(
         dx = x, sex = sex, causes = input$cod999, list_dx_included = input$diseases_all999,
         list_clean = gsub("- ", "", gsub("Additional: ", "", input$diseases_all999))
       )
     })
 
-    output$MRR_air_plot999 <- renderPlot({
+    output$MRR_air_plot999 <- renderPlotly({
       plot_mrr_air(
         dx = x, list_dx_included = input$diseases_all999,
         list_clean = gsub("- ", "", gsub("Additional: ", "", input$diseases_all999))
       )
     })
   })
-
-
-
 
   check_plot_all <- reactive({
     list(input$sex, input$diseases_all, input$cod)
@@ -607,120 +526,72 @@ function(input, output, session) {
     }
 
 
-    output$MRR_LYL_all <- renderPlot({
+    output$MRR_LYL_all <- renderPlotly({
       plot_all(
         dx = x, sex = sex, causes = input$cod, list_dx_included = labels$lab,
         list_clean = labels$description
       )
     })
 
-    output$MRR_all <- renderPlot({
-      g0 <- plot_mrr_all(
-        dx = x, sex = sex, causes = input$cod, list_dx_included = labels$lab,
-        list_clean = labels$description
-      )
-
+    output$MRR_all <- renderPlotly({
       estimates_mrr <- estimates %>%
         left_join(MRR, by = c("id", "sex")) %>%
-        filter(cod == !!input$cod)
-
-      xmin <- min(c(1, estimates_mrr$CI_left), na.rm = T)
-      xmax <- max(estimates_mrr$CI_right, na.rm = T)
-
-      g <- ggplot(estimates_mrr, aes(x = HR, y = -pos, color = description))
-
-      if (nrow(shaded) > 0) {
-        g <- g + geom_rect(
-          data = shaded, inherit.aes = FALSE,
-          aes(xmin = 0.8 * xmin, xmax = xmax, ymin = -max, ymax = -min),
-          fill = "grey", alpha = 0.5
-        ) +
-          geom_text(data = data.frame(x = 0.9 * xmin, y = 10, label = "Chapter"), inherit.aes = FALSE, aes(x = x, y = y, label = label)) +
-          geom_text(data = chapters_labels, inherit.aes = FALSE, aes(x = 0.9 * xmin, y = -med, label = as.roman(chapter)))
-      }
-
-      g <- g + geom_vline(xintercept = 1, linetype = "dashed", color = "red")
-
-      if (length(sex) == 1) {
-        g <- g +
-          geom_point() +
-          geom_errorbarh(aes(xmin = CI_left, xmax = CI_right), height = 0.13)
-      }
-      g <- g +
-        scale_y_continuous(limits = c(-max, 12)) +
-        scale_x_log10(breaks = c(0.2, 0.5, 0.8, 1, 1.2, 1.5, 3, 5, 10, 20, 40, 100, 150, 250)) +
-        scale_color_discrete(drop = FALSE) +
-        ylab(NULL) + xlab(paste0("Mortality Rate Ratios for ", tolower(input$cod), " causes (95% CI)")) +
-        theme_bw() +
-        theme(
-          axis.ticks.y = element_blank(),
-          axis.text.y = element_blank(),
-          legend.title = element_blank()
+        filter(cod == !!input$cod) %>%
+        left_join(select(list_dx, id, desc = desc_EN), by = "id") %>%
+        mutate(
+          text = paste0(
+            format_ci(HR, CI_left, CI_right, n = 1),
+            "\n", desc
+          )
         )
 
-      ggarrange(g0, g, ncol = 2)
+      cis_by_chapter(
+        estimates_mrr,
+        "HR", "CI_left", "CI_right", "text",
+        ytitle = paste0(
+          "Mortality Rate Ratios for ",
+          tolower(input$cod), " causes (95% CI)"
+        )
+      ) %>%
+        layout(
+          yaxis = list(type = "log", range = log10(c(0.3, 180)))
+        )
     })
 
-
-
-    output$LYL_all <- renderPlot({
-      g0 <- plot_lyl_all(
-        dx = x, sex = sex, causes = input$cod, list_dx_included = labels$lab,
-        list_clean = labels$description
-      )
-
+    output$LYL_all <- renderPlotly({
       LYL_aux <- LYL %>%
-        select(id, sex, LYL = LYL_Total, LYL_L = LYL_Total_L, LYL_R = LYL_Total_R) %>%
+        select(
+          id, sex, LYL = LYL_Total, LYL_L = LYL_Total_L, LYL_R = LYL_Total_R
+        ) %>%
         mutate(cod = "All") %>%
-        bind_rows(LYL %>% select(id, sex, LYL = LYL_Natural, LYL_L = LYL_Natural_L, LYL_R = LYL_Natural_R) %>% mutate(cod = "Natural")) %>%
-        bind_rows(LYL %>% select(id, sex, LYL = LYL_External, LYL_L = LYL_External_L, LYL_R = LYL_External_R) %>% mutate(cod = "External"))
+        bind_rows(
+          LYL %>% select(id, sex, LYL = LYL_Natural, LYL_L = LYL_Natural_L, LYL_R = LYL_Natural_R) %>% mutate(cod = "Natural")
+        ) %>%
+        bind_rows(
+          LYL %>% select(id, sex, LYL = LYL_External, LYL_L = LYL_External_L, LYL_R = LYL_External_R) %>% mutate(cod = "External")
+        )
 
       estimates_lyl <- estimates %>%
         left_join(LYL_aux, by = c("id", "sex")) %>%
-        filter(cod == !!input$cod)
-
-      xmin <- min(c(1, estimates_lyl$LYL, estimates_lyl$LYL_L), na.rm = T)
-      xmax <- max(estimates_lyl$LYL, estimates_lyl$LYL_L, na.rm = T)
-
-      g <- ggplot(estimates_lyl, aes(x = LYL, y = -pos, color = description))
-
-      if (nrow(shaded) > 0) {
-        g <- g + geom_rect(
-          data = shaded, inherit.aes = FALSE,
-          aes(xmin = 0.8 * xmin, xmax = xmax, ymin = -max, ymax = -min),
-          fill = "grey", alpha = 0.5
-        ) +
-          geom_text(data = data.frame(x = 0.9 * xmin, y = 10, label = "Chapter"), inherit.aes = FALSE, aes(x = x, y = y, label = label)) +
-          geom_text(data = chapters_labels, inherit.aes = FALSE, aes(x = 0.9 * xmin, y = -med, label = as.roman(chapter)))
-      }
-
-      g <- g + geom_vline(xintercept = 0, linetype = "dashed", color = "red")
-
-      if (length(sex) == 1) {
-        g <- g +
-          geom_point() +
-          geom_errorbarh(aes(xmin = LYL_L, xmax = LYL_R), height = 0.13)
-      }
-      g <- g +
-        scale_y_continuous(limits = c(-max, 12)) +
-        scale_x_continuous() +
-        scale_color_discrete(drop = FALSE) +
-        ylab(NULL) + xlab(paste0("Life Years Lost due to ", tolower(input$cod), " causes")) +
-        theme_bw() +
-        theme(
-          axis.ticks.y = element_blank(),
-          axis.text.y = element_blank(),
-          legend.title = element_blank()
+        filter(cod == !!input$cod) %>%
+        left_join(select(list_dx, id, desc = desc_EN), by = "id") %>%
+        mutate(
+          text = paste0(
+            format_ci(LYL, LYL_L, LYL_R, n = 1),
+            "\n", desc
+          )
         )
 
-      ggarrange(g0, g, ncol = 2)
+      cis_by_chapter(
+        estimates_lyl, "LYL", "LYL_L", "LYL_R", "text",
+        ytitle = paste0(
+          "Life Years Lost due to ",
+          tolower(input$cod), " causes"
+        )
+      )
     })
 
-    output$MRR_air_plot <- renderPlot({
-      g0 <- plot_mrr_air(
-        dx = x, list_dx_included = labels$lab,
-        list_clean = labels$description
-      )
+    output$MRR_air_plot <- renderPlotly({
 
       estimates_mrr_air <- estimates %>%
         left_join(MRR, by = c("id", "sex")) %>%
@@ -731,9 +602,9 @@ function(input, output, session) {
         mutate(se = (log(CI_right) - log(HR)) / qnorm(0.975)) %>%
         select(id, chapter, description, pos, HR, se) %>%
         left_join(estimates_mrr_air %>% filter(cod == "Air_not_adjust") %>%
-          mutate(se0 = (log(CI_right) - log(HR)) / qnorm(0.975)) %>%
-          select(id, HR0 = HR, se0),
-        by = "id"
+                    mutate(se0 = (log(CI_right) - log(HR)) / qnorm(0.975)) %>%
+                    select(id, HR0 = HR, se0),
+                  by = "id"
         ) %>%
         mutate(
           HR = HR / HR0,
@@ -742,58 +613,11 @@ function(input, output, session) {
           CI_right = ifelse(is.na(HR), NA, exp(log(HR) + qnorm(0.975) * se_comb))
         )
 
-      # if (input$air_plot_CIs == TRUE) {
-      #   xmin = min(c(1, estimates_mrr_air$CI_left), na.rm = T)
-      #   xmax = max(estimates_mrr_air$CI_right, na.rm = T)
-      # } else {
-      xmin <- min(c(1, estimates_mrr_air$HR), na.rm = T)
-      xmax <- max(estimates_mrr_air$HR, na.rm = T)
-      # }
-
-
-      g <- ggplot(estimates_mrr_air, aes(x = HR, y = -pos, color = description))
-
-      if (nrow(shaded) > 0) {
-        g <- g + geom_rect(
-          data = shaded, inherit.aes = FALSE,
-          aes(xmin = 0.95 * xmin, xmax = xmax, ymin = -max, ymax = -min),
-          fill = "grey", alpha = 0.5
-        ) +
-          geom_text(data = data.frame(x = 0.97 * xmin, y = 10, label = "Chapter"), inherit.aes = FALSE, aes(x = x, y = y, label = label)) +
-          geom_text(data = chapters_labels, inherit.aes = FALSE, aes(x = 0.97 * xmin, y = -med, label = as.roman(chapter)))
-      }
-
-      g <- g +
-        geom_point()
-
-      # if (input$air_plot_CIs == TRUE) {
-      #   g <- g + geom_errorbarh(aes(xmin=CI_left, xmax=CI_right), height=0.13)
-      # }
-
-      g <- g +
-        geom_vline(xintercept = 1, linetype = "dashed", color = "black") +
-        scale_y_continuous(limits = c(-max, 12)) +
-        # scale_x_log10(breaks = c(0.2, 0.5, 0.8, 0.9, 0.95, 1, 1.05, 1.1, 1.2, 1.5, 3, 5, 10, 20, 40, 100, 150, 250))+
-        scale_x_log10() +
-        scale_color_discrete(drop = FALSE) +
-        ylab(NULL) + xlab(paste0("Ratio of Mortality Rate Ratios (adjusted / not-adjusted)")) +
-        theme_bw() +
-        theme(
-          axis.ticks.y = element_blank(),
-          axis.text.y = element_blank(),
-          legend.title = element_blank()
-        )
-
-      ggarrange(g0, g, ncol = 2)
+      stop("TODO: split by color for both air and sex? ")
     })
   })
 
-
-
-
-
   ### MRRs
-
   observeEvent(input$button_MRRall999, {
     show_hide_arrows(
       button = "button_MRRall999", button2 = input$button_MRRall999, panel = "MRR_all999_show", session = session,
@@ -808,11 +632,7 @@ function(input, output, session) {
     )
   })
 
-
-
-
   ### LYL
-
   observeEvent(input$button_LYLall999, {
     show_hide_arrows(
       button = "button_LYLall999", button2 = input$button_LYLall999, panel = "LYL_all999_show", session = session,
@@ -826,8 +646,6 @@ function(input, output, session) {
       text = "life years lost only"
     )
   })
-
-
 
   ### Air pollution
   observeEvent(input$button_airall999, {
@@ -844,45 +662,6 @@ function(input, output, session) {
     )
   })
 
-
-
-
-  #  output$MRR_air_plot999 <- renderPlot({
-
-  #   plot_mrr_air(dx = gsub("- ", "", gsub("Additional: ", "", input$diseases_all999)))
-
-  # x <- MRR %>%
-  #   left_join(list_dx %>% select(id, level, chapter, desc_EN) %>% distinct(), by="id") %>%
-  #   filter(
-  #     level == 4,
-  #     desc_EN %in% gsub("- ", "", gsub("Additional: ", "", !!input$diseases_all999)),
-  #     cod %in% c("Air_adjusted", "Air_not_adjust")
-  #   ) %>%
-  #   arrange(id) %>%
-  #   mutate(
-  #     cod = factor(cod, levels = c("Air_adjusted", "Air_not_adjust"), labels = c("Adjusted for air pollution", "Not adjusted")),
-  #     pos = factor(id, levels = rev(list_unique999$id), labels = rev(list_unique999$description))
-  #   )
-  #
-  # ggplot(data = x, aes(y=pos, color = cod)) +
-  #   geom_vline(xintercept = 1, linetype = "dashed", color = "red")+
-  #   geom_point(aes(x=HR), position=pd) +
-  #   geom_errorbarh(aes(xmin=CI_left, xmax=CI_right), position=pd) +
-  #   scale_x_log10(breaks = c(0.2, 0.5, 0.8, 1, 1.2, 1.5, 3, 5, 10, 20, 40, 100, 150, 250))+
-  #   scale_y_discrete(drop = FALSE, breaks = gsub("- ", "", gsub("Additional: ", "", input$diseases_all999)), labels = input$diseases_all999) +
-  #   ylab(NULL) + xlab(paste0("Mortality Rate Ratios for all causes (95% CI)"))+
-  #   theme_bw()+
-  #   theme(
-  #     legend.title = element_blank(),
-  #     legend.position = "top",
-  #     axis.text.y = element_text(hjust=0, size = 11, vjust = 0.36)
-  #   )
-  #
-
-  # })
-
-
-
   ###################
   ###################
   ### All ICD-10: one disorder
@@ -890,20 +669,16 @@ function(input, output, session) {
   ### For list of GMCs (chapters 998 and 999)
   observe({
     updatePickerInput(session,
-      inputId = "dx_interest",
-      choices = c("--> Choose disorder of interest", list_unique$description)
+                      inputId = "dx_interest",
+                      choices = c("--> Choose disorder of interest", list_unique$description)
     )
 
     updatePickerInput(session,
-      inputId = "diseases_all",
-      choices = chapters_unique$description,
-      selected = chapters_unique$description
+                      inputId = "diseases_all",
+                      choices = chapters_unique$description,
+                      selected = chapters_unique$description
     )
   })
-
-
-
-
 
   observeEvent(input$dx_interest, {
     if (input$dx_interest == "--> Choose disorder of interest") {
@@ -921,23 +696,16 @@ function(input, output, session) {
     )
   })
 
-  # output$list <- renderTable({
-  #   table_main(dx = input$dx_interest)
-  # }, caption = "<b><u>Estimates not available:</u> Age at diagnosis</b> if 'Diagnosed<100'; <b>Age at death</b> if 'Deaths<100'; <b>Mortality rate ratio</b> if
-  # 'Diagnosed<100' or 'Deaths<20'; <b>Life years lost</b> if 'Diagnosed<100', 'Deaths<20' or not enough individuals at risk
-  # at old ages; <b>Life years lost</b> for persons if not available for both males and females. A range for <b>Diagnosed</b> and <b>Deaths</b> is provided
-  # when less than 5 individuals could be identified.")
-
   output$list <- renderDataTable({
     datatable(table_main(dx = input$dx_interest),
-      options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
-      rownames = FALSE,
-      caption = htmltools::tags$caption(
-        style = "caption-side: bottom;", htmltools::strong("Estimates not available: Age at diagnosis"), " if 'Diagnosed<100'; ", htmltools::strong("Age at death"), " if 'Deaths<100'; ", htmltools::strong("Mortality rate ratio"), " if
+              options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
+              rownames = FALSE,
+              caption = htmltools::tags$caption(
+                style = "caption-side: bottom;", htmltools::strong("Estimates not available: Age at diagnosis"), " if 'Diagnosed<100'; ", htmltools::strong("Age at death"), " if 'Deaths<100'; ", htmltools::strong("Mortality rate ratio"), " if
               'Diagnosed<100' or 'Deaths<20'; ", htmltools::strong("Life years lost"), " if 'Diagnosed<100', 'Deaths<20' or not enough individuals at risk
               at old ages; ", htmltools::strong("Life years lost"), " for persons if not available for both males and females. A range for ", htmltools::strong("Diagnosed"), " and ", htmltools::strong("Deaths"), " is provided
               when less than 5 individuals could be identified."
-      )
+              )
     )
   })
 
@@ -949,11 +717,11 @@ function(input, output, session) {
     )
   })
 
-  output$incidence <- renderPlot({
+  output$incidence <- renderPlotly({
     plot_incidence(dx = input$dx_interest)
   })
 
-  output$ages <- renderPlot({
+  output$ages <- renderPlotly({
     plot_age_dx(dx = input$dx_interest, smooth = input$smooth)
   })
 
@@ -966,11 +734,11 @@ function(input, output, session) {
     )
   })
 
-  output$mortality <- renderPlot({
+  output$mortality <- renderPlotly({
     plot_mortality(dx = input$dx_interest)
   })
 
-  output$ages_death <- renderPlot({
+  output$ages_death <- renderPlotly({
     plot_age_death(dx = input$dx_interest, smooth = input$smooth_death)
   })
 
@@ -992,7 +760,7 @@ function(input, output, session) {
     )
   })
 
-  output$LYLages <- renderPlot({
+  output$LYLages <- renderPlotly({
     plot_LYLages(dx = input$dx_interest)
   })
 
@@ -1004,22 +772,10 @@ function(input, output, session) {
     )
   })
 
-  # output$MRR <- renderTable({
-  #   table_causesMRR(dx = input$dx_interest)
-  # })
-  #
-  # output$LYL <- renderTable({
-  #   table_causesLYL(dx = input$dx_interest)
-  # })
-
-  # output$MRR_LYL_causes <- renderTable({
-  #   table_causes(dx = input$dx_interest)
-  # })
-
   output$MRR_LYL_causes <- renderDataTable({
     datatable(table_causes(dx = input$dx_interest),
-      options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
-      rownames = FALSE, container = causes_structure(dx = input$dx_interest)
+              options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
+              rownames = FALSE, container = causes_structure(dx = input$dx_interest)
     )
   })
 
@@ -1037,34 +793,26 @@ function(input, output, session) {
       slice(1)
 
     updateRadioGroupButtons(session,
-      inputId = "age_survival",
-      choices = c(
-        paste0("P25: ", x[1, "p25"], " years"),
-        paste0("P50 (median): ", x[1, "p50"], " years"),
-        paste0("P75: ", x[1, "p75"], " years")
-      ),
-      status = "primary",
-      selected = paste0("P50 (median): ", x[1, "p50"], " years")
+                            inputId = "age_survival",
+                            choices = c(
+                              paste0("P25: ", x[1, "p25"], " years"),
+                              paste0("P50 (median): ", x[1, "p50"], " years"),
+                              paste0("P75: ", x[1, "p75"], " years")
+                            ),
+                            status = "primary",
+                            selected = paste0("P50 (median): ", x[1, "p50"], " years")
     )
   })
 
-  check_plot <- reactive({
-    list(input$dx_interest, input$age_survival, input$cause_survival)
-  })
-  observeEvent(check_plot(), {
-    LYL_plot <- plot_LYLplot(dx = input$dx_interest, age = input$age_survival, cause = input$cause_survival)
 
-    output$LYLplot <- renderPlot({
-      LYL_plot$g
-    })
-
-    output$text_survival <- renderText({
-      LYL_plot$text
-    })
+  output$LYLplot <- renderPlotly({
+    res <- plot_LYLplot(dx = input$dx_interest, age = input$age_survival, cause = input$cause_survival)
+    text_survival <<- res$text
+    res$g
   })
 
-
-
+  text_survival <- NULL
+  output$text_survival <- renderText(text_survival)
 
   ### Air pollution
   observeEvent(input$button_air, {
@@ -1074,14 +822,10 @@ function(input, output, session) {
     )
   })
 
-  # output$MRR_air <- renderTable({
-  #   table_MRRair(dx = input$dx_interest)
-  # })
-
   output$MRR_air <- renderDataTable({
     datatable(table_MRRair(dx = input$dx_interest),
-      options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
-      rownames = FALSE, container = MRRair_structure
+              options = list(pageLength = 20, info = FALSE, lengthChange = FALSE, searching = FALSE, scrollX = FALSE, scrollY = FALSE, paging = FALSE),
+              rownames = FALSE, container = MRRair_structure
     )
   })
 
@@ -1092,14 +836,12 @@ function(input, output, session) {
     output$text_main <- renderText({
       x$main
     })
-
     output$text_agedx <- renderText({
       x$incidence
     })
     output$text_agedx2 <- renderText({
       x$incidence2
     })
-
     output$text_agedeath <- renderText({
       x$mortality
     })
@@ -1169,61 +911,22 @@ function(input, output, session) {
 
 
   observeEvent(input$interpret, {
-    if (input$interpret) {
-      shinyjs::show("text_main")
-      shinyjs::show("text_agedx")
-      shinyjs::show("text_agedx2")
-      shinyjs::show("text_agedeath")
-      shinyjs::show("text_agedeath2")
-      shinyjs::show("text_MRRlagged")
-      shinyjs::show("text_LYLages")
-      shinyjs::show("text_MRR_LYL_causes")
-      shinyjs::show("text_survival")
-      shinyjs::show("text_MRRair")
-    } else {
-      shinyjs::hide("text_main")
-      shinyjs::hide("text_agedx")
-      shinyjs::hide("text_agedx2")
-      shinyjs::hide("text_agedeath")
-      shinyjs::hide("text_agedeath2")
-      shinyjs::hide("text_MRRlagged")
-      shinyjs::hide("text_LYLages")
-      shinyjs::hide("text_MRR_LYL_causes")
-      shinyjs::hide("text_survival")
-      shinyjs::hide("text_MRRair")
-    }
+    ids <- c(
+      "main", "agedx", "agedx2", "agedeath", "agedeath2",
+      "MRRlagged", "LYLages", "MRR_LYL_causes", "survival", "MRRair"
+    )
+    func <- if (input$interpret) shinyjs::show else shinyjs::hide
+    lapply(paste0("text_", ids), func)
   })
-
-
-
 
   observeEvent(input$interpret999, {
-    if (input$interpret999) {
-      shinyjs::show("text_main999")
-      shinyjs::show("text_agedx999")
-      shinyjs::show("text_agedx2999")
-      shinyjs::show("text_agedeath999")
-      shinyjs::show("text_agedeath2999")
-      shinyjs::show("text_MRRlagged999")
-      shinyjs::show("text_LYLages999")
-      shinyjs::show("text_MRR_LYL_causes999")
-      shinyjs::show("text_survival999")
-      shinyjs::show("text_MRRair999")
-    } else {
-      shinyjs::hide("text_main999")
-      shinyjs::hide("text_agedx999")
-      shinyjs::hide("text_agedx2999")
-      shinyjs::hide("text_agedeath999")
-      shinyjs::hide("text_agedeath2999")
-      shinyjs::hide("text_MRRlagged999")
-      shinyjs::hide("text_LYLages999")
-      shinyjs::hide("text_MRR_LYL_causes999")
-      shinyjs::hide("text_survival999")
-      shinyjs::hide("text_MRRair999")
-    }
+    ids <- c(
+      "main999","agedx999","agedx2999","agedeath999","agedeath2999","MRRlagged999",
+      "LYLages999","MRR_LYL_causes999","survival999","MRRair999"
+    )
+    func <- if (input$interpret) shinyjs::show else shinyjs::hide
+    lapply(paste0("text_", ids), func)
   })
-
-
 
   observeEvent(input$dx_interest999, {
     x <- interpretation_main(dx = gsub("- ", "", gsub("Additional: ", "", input$dx_interest999)))
@@ -1307,7 +1010,8 @@ function(input, output, session) {
     }
   })
 
-  observeEvent(input$diseases_all,
+  observeEvent(
+    input$diseases_all,
     {
       if (is.null(input$diseases_all)) {
         shinyjs::hide(id = "main_panel_all")

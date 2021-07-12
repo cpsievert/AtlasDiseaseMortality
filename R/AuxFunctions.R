@@ -1,36 +1,102 @@
-format_numbers <- function(x, n) {
-  ifelse(is.na(x), NA, gsub(" ", "", format(round(x, n), nsmall = n)))
+ggplotly2 <- function(p, ..., tooltip = "text") {
+  dims <- getDims()
+  ggplotly(p, ..., width = dims$width, height = dims$height, tooltip = tooltip) %>%
+    config(displayModeBar = FALSE) %>%
+    layout(
+      xaxis = list(fixedrange = TRUE),
+      yaxis = list(fixedrange = TRUE)
+    )
+}
+
+subplot2 <- function(..., nrows = 1, margin = 0.01, shareX = FALSE,
+                     shareY = FALSE, titleX = shareX, titleY = shareY) {
+  plots <- lapply(rlang::list2(...), function(x) {
+    if (ggplot2::is.ggplot(x)) ggplotly2(x) else x
+  })
+  dims <- getDims()
+  sub <- subplot(
+    plots, nrows = nrows, margin = margin,
+    shareX = shareX, shareY = shareY,
+    titleX = titleX, titleY = titleY
+  )
+  layout(sub, width = dims$width, height = dims$height)
+}
+
+hline <- function(y = 0, ...) {
+  list(
+    type = "line",
+    x0 = 0, x1 = 1,
+    xref = "paper",
+    y0 = y, y1 = y,
+    line = list(...)
+  )
+}
+
+getDims <- function() {
+  info <- shiny::getCurrentOutputInfo()
+  list(
+    height = if (length(info)) info$height(),
+    width = if (length(info)) info$width()
+  )
 }
 
 
+format_ci <- function(est, lower, upper, n = 1, prefix = "") {
+  case_when(
+    is.na(est) ~ "-",
+    is.na(lower) | is.na(upper) ~ format_numbers(est, n),
+    TRUE ~ sprintf(
+      "%s (%s%s - %s)",
+      format_numbers(est, n),
+      prefix,
+      format_numbers(lower, n),
+      format_numbers(upper, n)
+    )
+  )
+}
+
+format_numbers <- function(x, n = 1) {
+  ifelse(
+    is.na(x), NA, gsub(" ", "", format(round(x, n), nsmall = n))
+  )
+}
 
 plot_incidence <- function(dx) {
+  if (dx == "--> Choose disorder of interest") {
+    return(NULL)
+  }
+
   x <- list_dx %>%
     filter(description == !!dx) %>%
     select(id) %>%
     distinct() %>%
     left_join(incidence, by = "id") %>%
-    filter(age_group <= 95)
+    filter(age_group <= 95) %>%
+    mutate(
+      dx_rate = 10000 * dx_rate,
+      dx_rate_left = 10000 * dx_rate_left,
+      dx_rate_right = 10000 * dx_rate_right,
+      text = paste0(
+        "Rate: ", format_ci(dx_rate, dx_rate_left, dx_rate_right, n = 1), "\n",
+        "Age: ", format_numbers(age_group + 2.5, 0)
+      )
+    )
 
-  if (dx != "--> Choose disorder of interest") {
-    g <- ggplot(x, aes(x = age_group + 2.5, y = 10000 * dx_rate)) +
-      geom_line(linetype = "dashed") +
-      geom_point() +
-      geom_errorbar(aes(ymin = 10000 * dx_rate_left, ymax = 10000 * dx_rate_right)) +
-      xlab("Age in years") +
-      ylab("Incidence rate (per 10,000 person-years)") +
-      scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
-      facet_grid(~sex, drop = FALSE) +
-      theme_bw()
-    return(g)
-  }
+  g <- ggplot(x, aes(x = age_group + 2.5, y = dx_rate, text = text)) +
+    geom_line(linetype = "dashed") +
+    geom_point() +
+    geom_errorbar(aes(ymin = dx_rate_left, ymax = dx_rate_right)) +
+    xlab("Age in years") +
+    ylab("Incidence rate (per 10,000 person-years)") +
+    scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
+    facet_grid(~sex, drop = FALSE)
+
+  ggplotly2(g)
 }
 
 
-
-
 table_main <- function(dx) {
-  t <- list_dx %>%
+  list_dx %>%
     filter(description == !!dx) %>%
     select(-MRR, -LYL) %>%
     left_join(MRR %>% filter(cod == "All"), by = c("id", "sex")) %>%
@@ -42,14 +108,14 @@ table_main <- function(dx) {
       Total = ifelse(is.na(Total), "-", Total)
     ) %>%
     select(Sex = sex, Diagnosed, "Age at diagnosis [Median (IQR)]" = dx_median, Deaths, "Age at death [Median (IQR)]" = death_median, "Mortality Rate Ratio" = MRR, "Life Years Lost" = Total)
-  return(t)
 }
 
 
-
-
-
 plot_mortality <- function(dx) {
+  if (dx == "--> Choose disorder of interest") {
+    return(NULL)
+  }
+
   x <- list_dx %>%
     filter(description == !!dx) %>%
     select(id) %>%
@@ -61,214 +127,170 @@ plot_mortality <- function(dx) {
       death_rate_left = ifelse(id == 0, NA, death_rate_left),
       death_rate_right = ifelse(id == 0, NA, death_rate_right)
     ) %>%
-    filter(age_group <= 95)
+    filter(age_group <= 95) %>%
+    mutate(
+      death_rate = 10000 * death_rate,
+      death_rate_left = 10000 * death_rate_left,
+      death_rate_right = 10000 * death_rate_right,
+      text = paste0(
+        "Rate: ", format_ci(death_rate, death_rate_left, death_rate_right, n = 1), "\n",
+        "Age: ", age_group + 2.5
+      ),
+      color = ifelse(id == 1, "Diagnosed with the disorder", "Entire Danish population")
+    )
 
-  if (dx != "--> Choose disorder of interest") {
-    g <- ggplot(x, aes(x = age_group + 2.5, y = 10000 * death_rate, group = factor(id), color = factor(id))) +
-      geom_line(linetype = "dashed") +
-      geom_point() +
-      geom_errorbar(aes(ymin = 10000 * death_rate_left, ymax = 10000 * death_rate_right)) +
-      xlab("Age in years") +
-      ylab("Mortality rates (per 10,000 person-years)") +
-      scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
-      facet_grid(~sex, drop = FALSE) +
-      theme_bw() +
-      scale_color_manual(
-        name = NULL,
-        breaks = c(1, 0),
-        labels = c("Diagnosed with the disorder", "Entire Danish population"),
-        values = c("red", "black")
-      ) +
-      theme(
-        legend.position = "top",
-        legend.text = element_text(size = 11)
+  g <- ggplot(x, aes(x = age_group + 2.5, y = death_rate, group = color, color = color)) +
+    geom_point(aes(customdata = text)) +
+    geom_errorbar(aes(ymin = death_rate_left, ymax = death_rate_right)) +
+    xlab("Age in years") +
+    ylab("Mortality rates (per 10,000 person-years)") +
+    scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
+    facet_grid(~sex, drop = FALSE)
+
+  gg <- ggplotly2(g) %>%
+    style(mode = "markers+lines", line.dash = "dot") %>%
+    layout(
+      hovermode = "x",
+      legend = list(
+        title = "", orientation = "h",
+        y = 1.15, yanchor = "bottom",
+        x = 0.5, xanchor = "center"
       )
-    return(g)
-  }
+    )
+
+  gg$x$data <- lapply(gg$x$data, function(tr) {
+    if (!length(tr$error_y)) {
+      tr$hovertemplate <- "%{customdata}<extra></extra>"
+    }
+    tr
+  })
+
+  gg
 }
 
 plot_age_dx <- function(dx, smooth) {
+  if (dx == "--> Choose disorder of interest") {
+    return(NULL)
+  }
+
   x <- list_dx %>%
     filter(description == !!dx) %>%
     select(id) %>%
     distinct() %>%
     left_join(ages, by = "id")
 
-  if (dx != "--> Choose disorder of interest") {
-    if (smooth == FALSE) {
-      g <- ggplot(x, aes(x = age, y = density_dx)) +
-        geom_line(color = "black") +
-        xlab("Age in years") +
-        ylab("Distribution of age of diagnosis (density)") +
-        scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
-        facet_grid(~sex, drop = FALSE) +
-        theme_bw()
-    } else {
-      g <- ggplot(x, aes(x = age, y = density_dx)) +
-        geom_smooth(color = "black", se = FALSE) +
-        xlab("Age in years") +
-        ylab("Distribution of age of diagnosis (density)") +
-        scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
-        facet_grid(~sex, drop = FALSE) +
-        scale_y_continuous(limit = c(0, NA)) +
-        theme_bw()
-    }
-    return(g)
+  g <- ggplot(x, aes(x = age, y = density_dx)) +
+    xlab("Age in years") +
+    ylab("Distribution of age of diagnosis (density)") +
+    scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
+    facet_grid(~sex, drop = FALSE)
+
+  if (smooth) {
+    g <- g + geom_smooth(color = "black", se = FALSE) +
+      scale_y_continuous(limit = c(0, NA))
+  } else {
+    g <- g + geom_line(color = "black")
   }
+
+  withr::with_options(
+    list(digits = 1),
+    ggplotly2(g, tooltip = c("y", "x"))
+  )
 }
 
 plot_age_death <- function(dx, smooth) {
+  if (dx == "--> Choose disorder of interest") {
+    return(NULL)
+  }
+
   x <- list_dx %>%
     filter(description == !!dx) %>%
     select(id) %>%
     distinct() %>%
     left_join(ages, by = "id")
 
-  if (dx != "--> Choose disorder of interest") {
-    if (smooth == FALSE) {
-      g <- ggplot(x, aes(x = age, y = density_death)) +
-        geom_line(color = "black") +
-        xlab("Age in years") +
-        ylab("Distribution of age of death among the diagnosed (density)") +
-        scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
-        facet_grid(~sex, drop = FALSE) +
-        theme_bw()
-    } else {
-      g <- ggplot(x, aes(x = age, y = density_death)) +
-        geom_smooth(color = "black", se = FALSE) +
-        xlab("Age in years") +
-        ylab("Distribution of age of death among the diagnosed (density)") +
-        scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
-        facet_grid(~sex, drop = FALSE) +
-        scale_y_continuous(limit = c(0, NA)) +
-        theme_bw()
-    }
-    return(g)
-  }
-}
+  g <- ggplot(x, aes(x = age, y = density_death)) +
+    xlab("Age in years") +
+    ylab("Distribution of age of death among the diagnosed (density)") +
+    scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
+    facet_grid(~sex, drop = FALSE)
 
+  if (smooth) {
+    g <- g + geom_smooth(color = "black", se = FALSE) +
+      scale_y_continuous(limit = c(0, NA))
+  } else {
+    g <- g + geom_line(color = "black")
+  }
+
+  withr::with_options(
+    list(digits = 1),
+    ggplotly2(g, tooltip = c("y", "x"))
+  )
+}
 
 plot_MRRlagged <- function(dx) {
-  if (dx != "--> Choose disorder of interest") {
-    x <- list_dx %>%
-      filter(description == !!dx) %>%
-      select(id) %>%
-      distinct() %>%
-      left_join(MRRlagged, by = "id") %>%
-      filter(exposure != 0)
-
-    g1 <- ggplot(x, aes(x = exposure, y = HR)) +
-      geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
-      geom_point() +
-      geom_errorbar(aes(ymin = CI_left, ymax = CI_right), width = 0.1) +
-      geom_line(linetype = "dashed") +
-      facet_grid(~sex, drop = TRUE) +
-      scale_x_continuous(breaks = 1:6, labels = c("0-6 months", "6-12 months", "1-2 years", "2-5 years", "5-10 years", "10+ years")) +
-      scale_y_log10() +
-      xlab("Time since first diagnosis") +
-      ylab("Mortality rate ratio (95% CI)") +
-      theme_bw()
-
-    x <- list_dx %>%
-      filter(description == !!dx) %>%
-      select(id) %>%
-      distinct() %>%
-      left_join(MRRage, by = "id") %>%
-      filter(age_group < 100)
-    age_categories <- unique(x$age_categories)
-
-    g2 <- ggplot(x, aes(x = age_group, y = HR)) +
-      geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
-      geom_point() +
-      geom_errorbar(aes(ymin = CI_left, ymax = CI_right), width = 1.5) +
-      geom_line(linetype = "dashed") +
-      facet_grid(~sex, drop = TRUE) +
-      scale_x_continuous(
-        breaks = seq(0, 95, age_categories),
-        labels = paste0(seq(0, 95, age_categories), "-", seq(age_categories, 95 + age_categories, age_categories))
-      ) +
-      scale_y_log10() +
-      xlab("Age in years") +
-      ylab("Mortality rate ratio (95% CI)") +
-      theme_bw() +
-      theme(
-        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
-      )
-
-    ggarrange(g1, g2, ncol = 2)
+  if (dx == "--> Choose disorder of interest") {
+    return(NULL)
   }
+
+  x <- list_dx %>%
+    filter(description == !!dx) %>%
+    select(id) %>%
+    distinct() %>%
+    left_join(MRRlagged, by = "id") %>%
+    filter(exposure != 0) %>%
+    mutate(text = format_ci(HR, CI_left, CI_right, n = 1))
+
+  g1 <- ggplot(x, aes(x = exposure, y = HR)) +
+    geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
+    geom_point(aes(text = text)) +
+    geom_errorbar(aes(ymin = CI_left, ymax = CI_right), width = 0.1) +
+    geom_line(linetype = "dashed") +
+    facet_grid(~sex, drop = TRUE) +
+    scale_x_continuous(breaks = 1:6, labels = c("0-6 months", "6-12 months", "1-2 years", "2-5 years", "5-10 years", "10+ years")) +
+    scale_y_log10()
+
+  g1 <- ggplotly2(g1) %>%
+    layout(
+      xaxis = list(title = "Time since first diagnosis"),
+      yaxis = list(title = "Mortality rate ratio (95% CI)")
+    )
+
+  x <- list_dx %>%
+    filter(description == !!dx) %>%
+    select(id) %>%
+    distinct() %>%
+    left_join(MRRage, by = "id") %>%
+    filter(age_group < 100) %>%
+    mutate(text = format_ci(HR, CI_left, CI_right, n = 1))
+
+  age_categories <- unique(x$age_categories)
+
+  g2 <- ggplot(x, aes(x = age_group, y = HR)) +
+    geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
+    geom_point(aes(text = text)) +
+    geom_errorbar(aes(ymin = CI_left, ymax = CI_right), width = 1.5) +
+    geom_line(linetype = "dashed") +
+    facet_grid(~sex, drop = TRUE) +
+    scale_x_continuous(
+      breaks = seq(0, 95, age_categories),
+      labels = paste0(seq(0, 95, age_categories), "-", seq(age_categories, 95 + age_categories, age_categories))
+    ) +
+    scale_y_log10() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+    )
+
+  g2 <- ggplotly2(g2) %>%
+    layout(
+      xaxis = list(title = "Age in years"),
+      yaxis = list(title = "")
+    )
+
+  subplot2(g1, g2, margin = 0.015, titleX = TRUE, titleY = TRUE)
 }
 
-# table_causesMRR <- function(dx) {
-#   t <- list_dx %>% filter(description == !!dx) %>%
-#     select(id) %>% distinct() %>% left_join(MRR, by="id") %>%
-#     filter(
-#       !(cod %in% c("Air_adjusted", "Air_not_adjust"))
-#     ) %>%
-#     mutate(
-#       mr = ifelse(is.na(rate), "-", paste0(rate, " vs. ", rateDK_std))
-#     ) %>%
-#     select('Sex' = sex, 'Cause of death' = cod, 'Mortality rates' = mr,
-#            'Mortality Rate Ratio' = MRR)
-#   return(t)
-# }
-#
-# table_causesLYL <- function(dx) {
-#   t <- list_dx %>% filter(description == !!dx) %>%
-#     select(id) %>% distinct() %>% left_join(LYL, by="id") %>%
-#     mutate(
-#       LE = ifelse(is.na(life_exp), "-", paste0(format_numbers(life_exp, 1), " vs. ", format_numbers(life_exp0, 1), " years"))
-#     ) %>%
-#     select('Sex' = sex, 'Life expectancy after diagnosis' = LE, 'Life Years Lost' = Total, 'Natural Causes' = Natural, 'External Causes' = External)
-#
-#   return(t)
-#
-#
-# }
-
 table_causes <- function(dx) {
-
-  # t1 <- list_dx %>% filter(description == !!dx) %>%
-  #   select(id) %>% distinct() %>% left_join(MRR, by="id") %>%
-  #   filter(
-  #     !(cod %in% c("Air_adjusted", "Air_not_adjust"))
-  #   ) %>%
-  #   mutate(
-  #     mr = ifelse(is.na(rate), "-", paste0(rate, " vs. ", rateDK_std))
-  #   )
-  #
-  # LYLs <- nrow(list_dx %>% filter(description == !!dx, LYL==TRUE))
-  #
-  # if(LYLs > 0) {
-  #   t2 <- list_dx %>% filter(description == !!dx) %>%
-  #     select(id) %>% distinct() %>% left_join(LYL, by="id") %>%
-  #     mutate(
-  #       LE = ifelse(is.na(life_exp), "-", paste0(format_numbers(life_exp, 1), " vs. ", format_numbers(life_exp0, 1), " years"))
-  #     )
-  #
-  #   t3 <- t2 %>%
-  #     select(sex, LE, LYL=Total) %>%
-  #     mutate(cod = "All") %>%
-  #     bind_rows(t2 %>%
-  #                 select(sex, LYL=Natural) %>%
-  #                 mutate(LE = "-", cod = "Natural")) %>%
-  #     bind_rows(t2 %>%
-  #                 select(sex, LYL=External) %>%
-  #                 mutate(LE = "-", cod = "External")) %>%
-  #     mutate(
-  #       LE = ifelse(is.na(LE), "-", LE),
-  #       LYL = ifelse(is.na(LYL), "-", LYL)
-  #     )
-  #
-  #   t <- t1 %>%
-  #     left_join(t3) %>%
-  #     select('Sex' = sex, 'Cause of death' = cod, 'Mortality rates' = mr,
-  #            'Mortality Rate Ratio' = MRR, 'Life expectancy after diagnosis' = LE, 'Life Years Lost' = LYL)
-  # } else {
-  #   t <- t1 %>%
-  #     select('Sex' = sex, 'Cause of death' = cod, 'Mortality rates' = mr,
-  #            'Mortality Rate Ratio' = MRR)
-  # }
 
   t1 <- list_dx %>%
     filter(description == !!dx) %>%
@@ -296,37 +318,35 @@ table_causes <- function(dx) {
         life_exp0 = ifelse(is.na(life_exp0), "-", paste0(as.character(format_numbers(life_exp0, 1)), " years"))
       ) %>%
       bind_rows(t2 %>%
-        select(sex, LYL = Natural) %>%
-        mutate(life_exp = "", life_exp0 = "", cod = "Natural")) %>%
+                  select(sex, LYL = Natural) %>%
+                  mutate(life_exp = "", life_exp0 = "", cod = "Natural")) %>%
       bind_rows(t2 %>%
-        select(sex, LYL = External) %>%
-        mutate(life_exp = "", life_exp0 = "", cod = "External")) %>%
+                  select(sex, LYL = External) %>%
+                  mutate(life_exp = "", life_exp0 = "", cod = "External")) %>%
       mutate(
         LYL = ifelse(is.na(LYL), "-", LYL)
       )
 
-    t <- t1 %>%
+    t1 %>%
       left_join(t3, by = c("sex", "cod")) %>%
       select(
         "Sex" = sex, "Cause of death" = cod, "Mortality rates diagnosed" = rate, "Mortality rates Denmark" = rateDK_std,
         "Mortality Rate Ratio" = MRR, "Life expectancy after diagnosis" = life_exp, "Life expectancy Denmark" = life_exp0, "Life Years Lost" = LYL
       )
   } else {
-    t <- t1 %>%
+    t1 %>%
       select(
         "Sex" = sex, "Cause of death" = cod, "Mortality rates diagnosed" = rate, "Mortality rates Denmark" = rateDK_std,
         "Mortality Rate Ratio" = MRR
       )
   }
-
-  return(t)
 }
 
 causes_structure <- function(dx) {
   LYLs <- nrow(list_dx %>% filter(description == !!dx, LYL == TRUE))
 
   if (LYLs > 0) {
-    sketch <- htmltools::withTags(table(
+    htmltools::withTags(table(
       class = "display",
       thead(
         tr(
@@ -343,7 +363,7 @@ causes_structure <- function(dx) {
       )
     ))
   } else {
-    sketch <- htmltools::withTags(table(
+    htmltools::withTags(table(
       class = "display",
       thead(
         tr(
@@ -358,35 +378,29 @@ causes_structure <- function(dx) {
       )
     ))
   }
-
-  return(sketch)
 }
 
-
-
-
 table_MRRair <- function(dx) {
-  t <- list_dx %>%
+  list_dx %>%
     filter(description == !!dx) %>%
     select(id) %>%
     distinct() %>%
     left_join(MRR, by = "id") %>%
-    filter(
-      cod == "Air_not_adjust"
-    ) %>%
+    filter(cod == "Air_not_adjust") %>%
     mutate(cod = "All") %>%
     select(id, sex, cod, rate, rateDK_std, MRR) %>%
-    left_join(MRR %>% filter(cod == "Air_adjusted") %>% select(id, MRR_adjusted = MRR), by = "id") %>%
-    mutate(
-      mr = paste0(rate, " vs. ", rateDK_std)
+    left_join(
+      MRR %>% filter(cod == "Air_adjusted") %>%
+        select(id, MRR_adjusted = MRR),
+      by = "id"
     ) %>%
+    mutate(mr = paste0(rate, " vs. ", rateDK_std)) %>%
     select(-id) %>%
     mutate(empty = "") %>%
     select(
       "Sex" = sex, rate, rateDK_std, empty,
       "Mortality Rate Ratio (MRR)" = MRR, "Adjusted MRR" = MRR_adjusted
     )
-  return(t)
 }
 
 MRRair_structure <- htmltools::withTags(table(
@@ -405,6 +419,10 @@ MRRair_structure <- htmltools::withTags(table(
 ))
 
 plot_LYLages <- function(dx) {
+  if (dx == "--> Choose disorder of interest") {
+    return(NULL)
+  }
+
   x <- list_dx %>%
     filter(description == !!dx) %>%
     select(id) %>%
@@ -416,62 +434,62 @@ plot_LYLages <- function(dx) {
     mutate(group = "Diagnosed with the disorder") %>%
     bind_rows(
       x %>% select(-life_exp, -life_exp_L, -life_exp_R) %>% rename(life_exp = life_exp0) %>% mutate(group = "Entire Danish population")
+    ) %>%
+    mutate(
+      text = paste0(
+        format_ci(life_exp, life_exp_L, life_exp_R, n = 1), "\n",
+        "Age: ", age
+      )
     )
 
-  if (dx != "--> Choose disorder of interest") {
-    # ggplot(x, aes(x=age, y=life_exp, linetype=group))+
-    #   geom_ribbon(aes(ymin=life_exp_L, ymax=life_exp_R), alpha=0.3, show.legend = FALSE)+
-    #   geom_line()+
-    #   scale_y_continuous(limits=c(0, NA))+
-    #   facet_grid(~sex, drop = FALSE)+
-    #   xlab("Age in years") + ylab("Remaining life expectancy after diagnosis (in years)")+
-    #   theme_bw()+
-    #   scale_linetype_manual(
-    #     name=NULL,
-    #     breaks = c("Diagnosed with the disorder", "Entire Danish population"),
-    #     labels = c("Diagnosed with the disorder", "Entire Danish population"),
-    #     values= c("solid", "dashed")
-    #   )+
-    #   theme(
-    #     legend.position = "top",
-    #     legend.text=element_text(size=11)
-    #   )
+  g <- ggplot(x, aes(x = age, y = life_exp, color = group)) +
+    geom_ribbon(aes(
+      ymin = ifelse(is.na(life_exp_L), life_exp, life_exp_L),
+      ymax = ifelse(is.na(life_exp_R), life_exp, life_exp_R),
+      fill = group), alpha = 0.5) +
+    geom_line(aes(customdata = text)) +
+    scale_y_continuous(limits = c(0, NA)) +
+    facet_grid(~sex) +
+    xlab("Age in years") +
+    ylab("Remaining life expectancy after diagnosis (in years)")
 
-    ggplot(x, aes(x = age, y = life_exp)) +
-      geom_ribbon(aes(ymin = life_exp_L, ymax = life_exp_R, fill = group), alpha = 0.3, show.legend = FALSE) +
-      geom_line(aes(color = group)) +
-      scale_y_continuous(limits = c(0, NA)) +
-      facet_grid(~sex, drop = FALSE) +
-      xlab("Age in years") +
-      ylab("Remaining life expectancy after diagnosis (in years)") +
-      theme_bw() +
-      scale_color_manual(
-        name = NULL,
-        breaks = c("Diagnosed with the disorder", "Entire Danish population"),
-        labels = c("Diagnosed with the disorder", "Entire Danish population"),
-        values = c("red", "black")
-      ) +
-      theme(
-        legend.position = "top",
-        legend.text = element_text(size = 11)
+  gg <- ggplotly2(g) %>%
+    style(hovertemplate = "%{customdata}<extra></extra>") %>%
+    layout(
+      hovermode = "x",
+      legend = list(
+        title = "", orientation = "h",
+        y = 1.15, yanchor = "bottom",
+        x = 0.5, xanchor = "center"
       )
-  }
+    )
+
+  gg$x$data <- lapply(gg$x$data, function(tr){
+    if (isTRUE(tr$fill == "toself")) {
+      tr$hovertemplate <- NULL
+    } else {
+      tr$showlegend <- FALSE
+    }
+    tr
+  })
+
+  gg
 }
 
 show_hide_arrows <- function(button, button2, panel, session, text) {
   if (button2 %% 2 == 1) {
     shinyjs::show(id = panel)
     updateActionButton(session,
-      inputId = button,
-      icon = icon("chevron-down"),
-      label = paste0("Click to hide ", text)
+                       inputId = button,
+                       icon = icon("chevron-down"),
+                       label = paste0("Click to hide ", text)
     )
   } else {
     shinyjs::hide(id = panel)
     updateActionButton(session,
-      inputId = button,
-      icon = icon("chevron-right"),
-      label = paste0("Click to show ", text)
+                       inputId = button,
+                       icon = icon("chevron-right"),
+                       label = paste0("Click to show ", text)
     )
   }
 }
@@ -480,16 +498,16 @@ hide_show_arrows <- function(button, button2, panel, session, text) {
   if (button2 %% 2 == 1) {
     shinyjs::hide(id = panel)
     updateActionButton(session,
-      inputId = button,
-      icon = icon("chevron-right"),
-      label = paste0("Click to show ", text)
+                       inputId = button,
+                       icon = icon("chevron-right"),
+                       label = paste0("Click to show ", text)
     )
   } else {
     shinyjs::show(id = panel)
     updateActionButton(session,
-      inputId = button,
-      icon = icon("chevron-down"),
-      label = paste0("Click to hide ", text)
+                       inputId = button,
+                       icon = icon("chevron-down"),
+                       label = paste0("Click to hide ", text)
     )
   }
 }
@@ -497,179 +515,174 @@ hide_show_arrows <- function(button, button2, panel, session, text) {
 
 
 plot_LYLplot <- function(dx, age, cause) {
-  if (dx != "--> Choose disorder of interest") {
-    x <- list_dx %>%
-      filter(description == !!dx) %>%
-      select(id, chapter) %>%
-      distinct()
-    LYLplot <- read.table(file = paste0("data/plot_chapter", x$chapter, ".txt"), header = T) %>%
-      filter(id == !!x$id) %>%
-      filter(time <= 100)
+  if (dx == "--> Choose disorder of interest") {
+    return(NULL)
+  }
+  x <- list_dx %>%
+    filter(description == !!dx) %>%
+    select(id, chapter) %>%
+    distinct()
+  LYLplot <- vroom::vroom(file = paste0("data/plot_chapter", x$chapter, ".txt"), delim = " ") %>%
+    filter(id == !!x$id) %>%
+    filter(time <= 100)
 
-    if (cause == "All causes") {
-      LYLplot <- LYLplot %>%
-        mutate(
-          cause = ifelse(cause == "Censored", "Censored", "Dead")
-        ) %>%
-        group_by(cause, group, sex, pct, time) %>%
-        summarise(cip = sum(cip)) %>%
-        ungroup() %>%
-        mutate(
-          cause = factor(cause, levels = c("Censored", "Dead"), labels = c("Alive", "Dead (all causes)")),
-          group = factor(group, levels = c("Diagnosed", "All population"), labels = c("Diagnosed with the disorder", "Entire Danish population"))
-        )
-    } else {
-      LYLplot <- LYLplot %>%
-        mutate(
-          cause = factor(cause, levels = c("Censored", "Natural", "External", "Dead"), labels = c("Alive", "Dead (natural causes)", "Dead (external causes)", "Dead (all causes)")),
-          group = factor(group, levels = c("Diagnosed", "All population"), labels = c("Diagnosed with the disorder", "Entire Danish population"))
-        )
-    }
-
+  if (cause == "All causes") {
     LYLplot <- LYLplot %>%
-      bind_rows(
-        LYLplot %>% group_by(cause, group, sex, pct) %>% slice(n()) %>% ungroup() %>% mutate(time = 100)
-      ) %>%
-      distinct()
-
-    LYLplot2 <- LYLplot %>% filter(pct == as.numeric(substr(age, 2, 3)))
-    min_age <- min(LYLplot2$time)
-
-    ref <- LYLplot2 %>%
-      filter(cause == "Alive") %>%
       mutate(
-        group2 = ifelse(group == "Entire Danish population", "Diagnosed with the disorder", "Entire Danish population")
+        cause = ifelse(cause == "Censored", "Censored", "Dead")
       ) %>%
-      mutate(group = group2, linetype = "Survival curve in\nthe other group") %>%
-      select(-group2)
-
-
-    g <- ggplot(LYLplot2, aes(x = time, y = 100 * cip, fill = cause)) +
-      geom_area(alpha = 0.6, size = 0.3, color = "black", position = position_stack(rev = T)) +
-      geom_line(data = ref, aes(x = time, y = 100 * cip, linetype = linetype)) +
-      facet_grid(group ~ sex, drop = FALSE) +
-      xlab("Age in years") +
-      ylab("Percentage of persons alive") +
-      theme_bw() +
-      scale_x_continuous(breaks = c(min_age, seq(0, 100, 10))) +
-      scale_linetype_manual(
-        name = "",
-        values = "dashed"
+      group_by(cause, group, sex, pct, time) %>%
+      summarise(cip = sum(cip)) %>%
+      ungroup() %>%
+      mutate(
+        cause = factor(cause, levels = c("Censored", "Dead"), labels = c("Alive", "Dead (all causes)")),
+        group = factor(group, levels = c("Diagnosed", "All population"), labels = c("Diagnosed with the disorder", "Entire Danish population"))
       )
+  } else {
+    LYLplot <- LYLplot %>%
+      mutate(
+        cause = factor(cause, levels = c("Censored", "Natural", "External", "Dead"), labels = c("Alive", "Dead (natural causes)", "Dead (external causes)", "Dead (all causes)")),
+        group = factor(group, levels = c("Diagnosed", "All population"), labels = c("Diagnosed with the disorder", "Entire Danish population"))
+      )
+  }
 
-    if (cause == "All causes") {
-      g <- g +
-        scale_fill_manual(
-          name = "",
-          breaks = c("Alive", "Dead (all causes)"),
-          values = c("white", "red")
-        )
-    } else {
-      g <- g +
-        scale_fill_manual(
-          name = "",
-          breaks = c("Alive", "Dead (natural causes)", "Dead (external causes)", "Dead (all causes)"),
-          values = c("white", "#7fc97f", "#beaed4", "red")
-        )
-    }
+  LYLplot <- LYLplot %>%
+    bind_rows(
+      LYLplot %>% group_by(cause, group, sex, pct) %>% slice(n()) %>% ungroup() %>% mutate(time = 100)
+    ) %>%
+    distinct()
 
-    g <- g +
-      guides(linetype = guide_legend(order = 2), fill = guide_legend(order = 1))
+  LYLplot2 <- LYLplot %>% filter(pct == as.numeric(substr(age, 2, 3)))
+  min_age <- min(LYLplot2$time)
 
+  ref <- LYLplot2 %>%
+    filter(cause == "Alive") %>%
+    mutate(
+      group2 = ifelse(group == "Entire Danish population", "Diagnosed with the disorder", "Entire Danish population")
+    ) %>%
+    mutate(group = group2, linetype = "Survival curve in\nthe other group") %>%
+    select(-group2)
 
-
-    # Text for interpretation
-    check <- list_dx %>%
-      filter(description == !!dx) %>%
-      filter(LYL == TRUE) %>%
-      select(id, p25, p50, p75) %>%
-      distinct()
-    point <- seq(0, 100, 10)
-    point <- point[point > as.numeric(check[, paste0("p", as.numeric(substr(age, 2, 3)))])]
-    point <- point[ceiling(length(point) / 2)]
-
-    data <- LYLplot2 %>%
-      filter(time <= !!point) %>%
-      group_by(cause, group, sex) %>%
-      arrange(-time) %>%
-      slice(1) %>%
-      ungroup()
-
-
-    causes <- FALSE
-    text <- paste0(
-      "<b>Interpretation:</b> When focusing on one specific age, it is possible to look at the survival curves from that age, as well as the cumulative incidences of dying.
-    Here we present the survival curves and stacked cumulative incidences for 3 specific ages, corresponding to the median age at diagnosis (",
-      format_numbers(as.numeric(check$p50), 0), " years), and
-                   percentiles 25 (", format_numbers(as.numeric(check$p25), 0), " years) and 75 (", format_numbers(as.numeric(check$p75), 0), " years)."
+  # TODO: maybe use 'native' stacked area charts?
+  g <- ggplot(LYLplot2, aes(x = time, y = 100 * cip, fill = cause)) +
+    geom_area(alpha = 0.6, size = 0.3, color = "black", position = position_stack(rev = T)) +
+    geom_line(data = ref, aes(x = time, y = 100 * cip, linetype = linetype)) +
+    facet_grid(group ~ sex, drop = FALSE) +
+    xlab("Age in years") +
+    ylab("Percentage of persons alive") +
+    scale_x_continuous(breaks = c(min_age, seq(0, 100, 10))) +
+    scale_linetype_manual(
+      name = "",
+      values = "dashed"
     )
 
-    LYL_plot_sex <- data %>% filter(sex == "Females")
-    if (nrow(LYL_plot_sex) > 0) {
-      sex <- "Females"
-    } else {
-      LYL_plot_sex <- data %>% filter(sex == "Males")
-      if (nrow(LYL_plot_sex) > 0) {
-        sex <- "Males"
-      }
-    }
-
-    if (nrow(LYL_plot_sex) > 0) {
-      surv <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Alive", group == "Diagnosed with the disorder") %>% select(cip)), 0)
-      surv0 <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Alive", group != "Diagnosed with the disorder") %>% select(cip)), 0)
-
-      text <- paste0(
-        text, " When looking at ", tolower(sex), " with a diagnosis at age ", min_age, " years, ", surv, "% of them are alive at age ", point,
-        ", compared to ", surv0, "% in the general population of Danish ", tolower(sex), " of the same age."
+  if (cause == "All causes") {
+    g <- g +
+      scale_fill_manual(
+        name = "",
+        breaks = c("Alive", "Dead (all causes)"),
+        values = c("white", "red")
       )
-
-      if ("Dead (natural causes)" %in% LYL_plot_sex$cause) {
-        causes <- TRUE
-        nat <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Dead (natural causes)", group == "Diagnosed with the disorder") %>% select(cip)), 0)
-        nat0 <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Dead (natural causes)", group != "Diagnosed with the disorder") %>% select(cip)), 0)
-        ext <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Dead (external causes)", group == "Diagnosed with the disorder") %>% select(cip)), 0)
-        ext0 <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Dead (external causes)", group != "Diagnosed with the disorder") %>% select(cip)), 0)
-
-        text <- paste0(
-          text, " More specifically, ", nat, "% die of natural causes and ", ext, "% of external causes (compared to ",
-          nat0, "% and ", ext0, "% in the general population of Danish ", tolower(sex), " of the same age)."
-        )
-      }
-
-      LYL_plot_sex <- LYL_plot_sex %>%
-        mutate(id = as.numeric(check$id)) %>%
-        select(id, sex) %>%
-        distinct() %>%
-        left_join(LYLages, by = c("id", "sex")) %>%
-        filter(age == !!min_age)
-
-      text <- paste0(
-        text, " When looking at remaining life expectancy (corresponding to the area under the survival curve), ", tolower(sex),
-        " with a diagnosis at age ", min_age, ", live on average an additional ", format_numbers(LYL_plot_sex$life_exp, 1), " years, compared to ",
-        format_numbers(LYL_plot_sex$life_exp0, 1), " years in Danish ", tolower(sex), " from the general population. Consequently, ", tolower(sex),
-        " with a diagnosis at age ", min_age, " years experience an average life years lost of ",
-        format_numbers(LYL_plot_sex$life_exp0 - LYL_plot_sex$life_exp, 1), " years"
+  } else {
+    g <- g +
+      scale_fill_manual(
+        name = "",
+        breaks = c("Alive", "Dead (natural causes)", "Dead (external causes)", "Dead (all causes)"),
+        values = c("white", "#7fc97f", "#beaed4", "red")
       )
-
-      if (causes == TRUE) {
-        text <- paste0(
-          text, ", which can be decomposed into ", format_numbers(LYL_plot_sex$LYL_Natural, 1), " years due to natural causes and ",
-          format_numbers(LYL_plot_sex$LYL_External, 1), " years due to external causes.<br/><b>Note:</b> These estimates are based on the assumption that the diagnosed will experience the mortality rates
-                                                   of the diagnosed during the entire life (after diagnosis), which might be plausible for chronic disorders but not for acute ones."
-        )
-      } else {
-        text <- paste0(text, ".<br/><b>Note:</b> These estimates are based on the assumption that the diagnosed will experience the mortality rates
-                                                   of the diagnosed during the entire life (after diagnosis), which might be plausible for chronic disorders but not for acute ones.")
-      }
-    }
-
-    text <- HTML("<div style='background-color:#E5E4E2'>", text)
-
-    return(list(g = g, text = text))
   }
+
+  g <- g +
+    guides(linetype = guide_legend(order = 2), fill = guide_legend(order = 1))
+
+  # Text for interpretation
+  check <- list_dx %>%
+    filter(description == !!dx) %>%
+    filter(LYL == TRUE) %>%
+    select(id, p25, p50, p75) %>%
+    distinct()
+  point <- seq(0, 100, 10)
+  point <- point[point > as.numeric(check[, paste0("p", as.numeric(substr(age, 2, 3)))])]
+  point <- point[ceiling(length(point) / 2)]
+
+  data <- LYLplot2 %>%
+    filter(time <= !!point) %>%
+    group_by(cause, group, sex) %>%
+    arrange(-time) %>%
+    slice(1) %>%
+    ungroup()
+
+  causes <- FALSE
+  text <- paste0(
+    "<b>Interpretation:</b> When focusing on one specific age, it is possible to look at the survival curves from that age, as well as the cumulative incidences of dying.
+    Here we present the survival curves and stacked cumulative incidences for 3 specific ages, corresponding to the median age at diagnosis (",
+    format_numbers(as.numeric(check$p50), 0), " years), and
+                   percentiles 25 (", format_numbers(as.numeric(check$p25), 0), " years) and 75 (", format_numbers(as.numeric(check$p75), 0), " years)."
+  )
+
+  LYL_plot_sex <- data %>% filter(sex == "Females")
+  if (nrow(LYL_plot_sex) > 0) {
+    sex <- "Females"
+  } else {
+    LYL_plot_sex <- data %>% filter(sex == "Males")
+    if (nrow(LYL_plot_sex) > 0) {
+      sex <- "Males"
+    }
+  }
+
+  if (nrow(LYL_plot_sex) > 0) {
+    surv <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Alive", group == "Diagnosed with the disorder") %>% select(cip)), 0)
+    surv0 <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Alive", group != "Diagnosed with the disorder") %>% select(cip)), 0)
+
+    text <- paste0(
+      text, " When looking at ", tolower(sex), " with a diagnosis at age ", min_age, " years, ", surv, "% of them are alive at age ", point,
+      ", compared to ", surv0, "% in the general population of Danish ", tolower(sex), " of the same age."
+    )
+
+    if ("Dead (natural causes)" %in% LYL_plot_sex$cause) {
+      causes <- TRUE
+      nat <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Dead (natural causes)", group == "Diagnosed with the disorder") %>% select(cip)), 0)
+      nat0 <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Dead (natural causes)", group != "Diagnosed with the disorder") %>% select(cip)), 0)
+      ext <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Dead (external causes)", group == "Diagnosed with the disorder") %>% select(cip)), 0)
+      ext0 <- format_numbers(100 * as.numeric(LYL_plot_sex %>% filter(sex == !!sex, cause == "Dead (external causes)", group != "Diagnosed with the disorder") %>% select(cip)), 0)
+
+      text <- paste0(
+        text, " More specifically, ", nat, "% die of natural causes and ", ext, "% of external causes (compared to ",
+        nat0, "% and ", ext0, "% in the general population of Danish ", tolower(sex), " of the same age)."
+      )
+    }
+
+    LYL_plot_sex <- LYL_plot_sex %>%
+      mutate(id = as.numeric(check$id)) %>%
+      select(id, sex) %>%
+      distinct() %>%
+      left_join(LYLages, by = c("id", "sex")) %>%
+      filter(age == !!min_age)
+
+    text <- paste0(
+      text, " When looking at remaining life expectancy (corresponding to the area under the survival curve), ", tolower(sex),
+      " with a diagnosis at age ", min_age, ", live on average an additional ", format_numbers(LYL_plot_sex$life_exp, 1), " years, compared to ",
+      format_numbers(LYL_plot_sex$life_exp0, 1), " years in Danish ", tolower(sex), " from the general population. Consequently, ", tolower(sex),
+      " with a diagnosis at age ", min_age, " years experience an average life years lost of ",
+      format_numbers(LYL_plot_sex$life_exp0 - LYL_plot_sex$life_exp, 1), " years"
+    )
+
+    if (causes == TRUE) {
+      text <- paste0(
+        text, ", which can be decomposed into ", format_numbers(LYL_plot_sex$LYL_Natural, 1), " years due to natural causes and ",
+        format_numbers(LYL_plot_sex$LYL_External, 1), " years due to external causes.<br/><b>Note:</b> These estimates are based on the assumption that the diagnosed will experience the mortality rates
+                                                   of the diagnosed during the entire life (after diagnosis), which might be plausible for chronic disorders but not for acute ones."
+      )
+    } else {
+      text <- paste0(text, ".<br/><b>Note:</b> These estimates are based on the assumption that the diagnosed will experience the mortality rates
+                                                   of the diagnosed during the entire life (after diagnosis), which might be plausible for chronic disorders but not for acute ones.")
+    }
+  }
+
+  text <- HTML("<div style='background-color:#E5E4E2'>", text, "</div>")
+
+  list(g = ggplotly2(g) %>% layout(showlegend = FALSE), text = text)
 }
-
-
 
 interpretation_main <- function(dx) {
   # Prepare interpretation and what to show
@@ -750,7 +763,7 @@ interpretation_main <- function(dx) {
     }
     N_text <- paste0(N_text, mortality_text)
   }
-  main <- HTML("<div style='background-color:#E5E4E2'>", N_text)
+  main <- HTML("<div style='background-color:#E5E4E2'>", N_text, "</div>")
 
   ###### Incidence
   x <- list_dx %>%
@@ -807,7 +820,7 @@ interpretation_main <- function(dx) {
     text_incidence <- ""
   }
 
-  text_incidence <- HTML("<div style='background-color:#E5E4E2'>", text_incidence)
+  text_incidence <- HTML("<div style='background-color:#E5E4E2'>", text_incidence, "</div>")
 
   incidence2 <- "<b>Interpretation:</b> These figures show the distribution of age-of-onset, without taking into account whether
   a disorder is more or less likely to occur."
@@ -823,7 +836,7 @@ interpretation_main <- function(dx) {
     )
   }
 
-  incidence2 <- HTML("<div style='background-color:#E5E4E2'>", incidence2)
+  incidence2 <- HTML("<div style='background-color:#E5E4E2'>", incidence2, "</div>")
 
 
   ###### Mortality rates
@@ -841,8 +854,8 @@ interpretation_main <- function(dx) {
   x <- x %>%
     filter(id == 1) %>%
     left_join(x %>% filter(id == 0) %>%
-      select(age_group, sex, death_rate0 = death_rate, death_rate_left0 = death_rate_left, death_rate_right0 = death_rate_right),
-    by = c("sex", "age_group")
+                select(age_group, sex, death_rate0 = death_rate, death_rate_left0 = death_rate_left, death_rate_right0 = death_rate_right),
+              by = c("sex", "age_group")
     )
 
   if (!is.na(sex) & (sex == "persons")) {
@@ -903,8 +916,7 @@ interpretation_main <- function(dx) {
     mortality <- ""
   }
 
-  mortality <- HTML("<div style='background-color:#E5E4E2'>", mortality)
-
+  mortality <- HTML("<div style='background-color:#E5E4E2'>", mortality, "</div>")
 
   mortality2 <- paste0(
     "<b>Interpretation:</b> These figures show the distribution of age-of-death among those diagnosed for the first time with disorder \"", N[1, "desc_EN"],
@@ -920,9 +932,7 @@ interpretation_main <- function(dx) {
     )
   }
 
-  mortality2 <- HTML("<div style='background-color:#E5E4E2'>", mortality2)
-
-
+  mortality2 <- HTML("<div style='background-color:#E5E4E2'>", mortality2, "</div>")
 
   # Among persons diagnosed with disorders of the circulatory system who died, the median age at time of death was 81.6 years (25% were younger than 73.3 years and 25% were older than 88.0 years).
 
@@ -967,7 +977,6 @@ interpretation_main <- function(dx) {
     )
   }
 
-
   MRR_age <- NA
 
   if (nrow(x %>% filter(exposure == 4)) > 0) {
@@ -975,8 +984,6 @@ interpretation_main <- function(dx) {
     CI_left <- x[x$exposure == 4, "CI_left"]
     CI_right <- x[x$exposure == 4, "CI_right"]
   }
-
-
 
   if (!is.na(MRR_age)) {
     if (MRR_age < 1) {
@@ -1059,7 +1066,7 @@ interpretation_main <- function(dx) {
     }
   }
 
-  lagged <- HTML("<div style='background-color:#E5E4E2'>", lagged)
+  lagged <- HTML("<div style='background-color:#E5E4E2'>", lagged, "</div>")
 
 
   ## LYL ages
@@ -1133,7 +1140,7 @@ interpretation_main <- function(dx) {
     LYLages <- ""
   }
 
-  LYLages <- HTML("<div style='background-color:#E5E4E2'>", LYLages)
+  LYLages <- HTML("<div style='background-color:#E5E4E2'>", LYLages, "</div>")
 
 
   ##### MRRs
@@ -1225,7 +1232,7 @@ interpretation_main <- function(dx) {
          of the diagnosed during the entire life (after diagnosis), which might be plausible for chronic disorders but not for acute ones.")
   }
 
-  text_MRR <- HTML("<div style='background-color:#E5E4E2'>", text_MRR)
+  text_MRR <- HTML("<div style='background-color:#E5E4E2'>", text_MRR, "</div>")
 
   ##### Air
   x <- t %>%
@@ -1258,7 +1265,7 @@ mortality rate ratios for all-cause mortality have been estimated after further 
     MRRair <- ""
   }
 
-  MRRair <- HTML("<div style='background-color:#E5E4E2'>", MRRair)
+  MRRair <- HTML("<div style='background-color:#E5E4E2'>", MRRair, "</div>")
 
 
   return(list(
@@ -1290,9 +1297,6 @@ close_panels <- function(n, button, button2, panel, session) {
 }
 
 
-
-
-
 plot_all <- function(dx, sex, causes, list_dx_included, list_clean) {
   x_sex <- dx %>% filter(sex %in% !!sex)
 
@@ -1310,11 +1314,13 @@ plot_all <- function(dx, sex, causes, list_dx_included, list_clean) {
     dx <- x_sex
   }
 
+  dx <- mutate(dx, text_count = paste0(format_numbers(n/1000, 0), " thousand\n", pos))
+
   if (length(sex) == 2) {
-    g <- ggplot(dx, aes(y = pos, x = n / 1000, color = sex, fill = sex)) +
+    g <- ggplot(dx, aes(y = pos, x = n / 1000, color = sex, fill = sex, text = text_count)) +
       geom_col(position = "dodge")
   } else {
-    g <- ggplot(dx, aes(y = pos, x = n / 1000)) +
+    g <- ggplot(dx, aes(y = pos, x = n / 1000, text = text_count)) +
       geom_col()
   }
 
@@ -1322,89 +1328,19 @@ plot_all <- function(dx, sex, causes, list_dx_included, list_clean) {
     scale_x_continuous(labels = scales::comma) +
     scale_y_discrete(drop = FALSE, breaks = list_clean, labels = list_dx_included) +
     ylab(NULL) + xlab("Number of diagnosed in 1995-2018 (in thousands)") +
-    theme_bw() +
     theme(
       legend.title = element_blank(),
       legend.position = "top",
       axis.text.y = element_text(hjust = 0, size = 11, vjust = 0.36)
     )
 
-  x <- dx %>%
-    select(id, sex, level, chapter, desc_EN, pos) %>%
-    left_join(
-      MRR,
-      by = c("id", "sex")
-    ) %>%
-    filter(cod == !!causes)
-
-  if (length(sex) == 2) {
-    g <- ggplot(data = x, aes(x = HR, y = pos, color = sex)) +
-      geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
-      geom_point(position = pd) +
-      geom_errorbarh(aes(xmin = CI_left, xmax = CI_right), height = 0.13, position = pd)
-  } else {
-    g <- ggplot(data = x, aes(x = HR, y = pos)) +
-      geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
-      geom_point() +
-      geom_errorbarh(aes(xmin = CI_left, xmax = CI_right), height = 0.13)
-  }
-
-  g0 <- g +
-    scale_x_log10(breaks = c(0.2, 0.5, 0.8, 1, 1.2, 1.5, 3, 5, 10, 20, 40, 100, 150, 250)) +
-    scale_y_discrete(drop = FALSE, breaks = list_clean, labels = list_dx_included) +
-    ylab(NULL) + xlab(paste0("Mortality Rate Ratios for ", tolower(causes), " causes (95% CI)")) +
-    theme_bw() +
-    theme(
-      legend.title = element_blank(),
-      legend.position = "top",
-      axis.text.y = element_blank()
-    )
-
-  LYL_aux <- LYL %>%
-    select(id, sex, LYL = LYL_Total, LYL_L = LYL_Total_L, LYL_R = LYL_Total_R) %>%
-    mutate(cod = "All") %>%
-    bind_rows(LYL %>% select(id, sex, LYL = LYL_Natural, LYL_L = LYL_Natural_L, LYL_R = LYL_Natural_R) %>% mutate(cod = "Natural")) %>%
-    bind_rows(LYL %>% select(id, sex, LYL = LYL_External, LYL_L = LYL_External_L, LYL_R = LYL_External_R) %>% mutate(cod = "External"))
-
-
-  x2 <- dx %>%
-    select(id, sex, level, chapter, desc_EN, pos) %>%
-    left_join(
-      LYL_aux,
-      by = c("id", "sex")
-    ) %>%
-    filter(cod == !!causes)
-
-  # if(causes == "External") {
-  #   breaks_LYL <- seq(-10, 10, 0.5)
-  # } else {
-  #   breaks_LYL <- seq(-20, 60, 2)
-  # }
-
-  if (length(sex) == 2) {
-    g <- ggplot(data = x2, aes(x = LYL, y = pos, color = sex)) +
-      geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
-      geom_point(position = pd) +
-      geom_errorbarh(aes(xmin = LYL_L, xmax = LYL_R), height = 0.13, position = pd)
-  } else {
-    g <- ggplot(data = x2, aes(x = LYL, y = pos)) +
-      geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
-      geom_point() +
-      geom_errorbarh(aes(xmin = LYL_L, xmax = LYL_R), height = 0.13)
-  }
-
-  g1 <- g +
-    # scale_x_continuous(breaks = breaks_LYL)+
-    scale_y_discrete(drop = FALSE, breaks = list_clean, labels = list_dx_included) +
-    ylab(NULL) + xlab(paste0("Life Years Lost due to ", tolower(causes), " causes")) +
-    theme_bw() +
-    theme(
-      legend.title = element_blank(),
-      legend.position = "top",
-      axis.text.y = element_blank()
-    )
-
-  return(ggarrange(g00, g0, g1, ncol = 3))
+  subplot2(
+    g00,
+    plot_mrr_all(dx, sex, causes, list_dx_included, list_clean) %>%
+      layout(yaxis = list(showticklabels = FALSE)),
+    plot_lyl_all(dx, sex, causes, list_dx_included, list_clean) %>%
+      layout(yaxis = list(showticklabels = FALSE))
+  )
 }
 
 
@@ -1431,31 +1367,34 @@ plot_mrr_all <- function(dx, sex, causes, list_dx_included, list_clean) {
       MRR,
       by = c("id", "sex")
     ) %>%
-    filter(cod == !!causes)
-
+    filter(cod == !!causes) %>%
+    mutate(
+      text = paste0(format_ci(HR, CI_left, CI_right, n = 1), "\n", pos)
+    )
 
   if (length(sex) == 2) {
-    g <- ggplot(data = x, aes(x = HR, y = pos, color = sex)) +
+    g <- ggplot(data = x, aes(x = HR, y = pos, color = sex, text = text)) +
       geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
       geom_point(position = pd) +
       geom_errorbarh(aes(xmin = CI_left, xmax = CI_right), height = 0.13, position = pd)
   } else {
-    g <- ggplot(data = x, aes(x = HR, y = pos)) +
+    g <- ggplot(data = x, aes(x = HR, y = pos, text = text)) +
       geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
       geom_point() +
       geom_errorbarh(aes(xmin = CI_left, xmax = CI_right), height = 0.13)
   }
 
-  g +
+  gg <- g +
     scale_x_log10(breaks = c(0.2, 0.5, 0.8, 1, 1.2, 1.5, 3, 5, 10, 20, 40, 100, 150, 250)) +
     scale_y_discrete(drop = FALSE, breaks = list_clean, labels = list_dx_included) +
     ylab(NULL) + xlab(paste0("Mortality Rate Ratios for ", tolower(causes), " causes (95% CI)")) +
-    theme_bw() +
     theme(
       legend.title = element_blank(),
       axis.text.y = element_text(hjust = 0, size = 11, vjust = 0.36)
     )
+  ggplotly2(gg)
 }
+
 
 plot_lyl_all <- function(dx, sex, causes, list_dx_included, list_clean) {
   x_sex <- dx %>% filter(sex %in% !!sex)
@@ -1480,35 +1419,34 @@ plot_lyl_all <- function(dx, sex, causes, list_dx_included, list_clean) {
     bind_rows(LYL %>% select(id, sex, LYL = LYL_Natural, LYL_L = LYL_Natural_L, LYL_R = LYL_Natural_R) %>% mutate(cod = "Natural")) %>%
     bind_rows(LYL %>% select(id, sex, LYL = LYL_External, LYL_L = LYL_External_L, LYL_R = LYL_External_R) %>% mutate(cod = "External"))
 
-
   x2 <- dx %>%
     select(id, sex, level, chapter, desc_EN, pos) %>%
     left_join(
       LYL_aux,
       by = c("id", "sex")
     ) %>%
-    filter(cod == !!causes)
+    filter(cod == !!causes) %>%
+    mutate(
+      text = paste0(format_ci(LYL, LYL_L, LYL_R, n = 1), "\n", pos)
+    )
 
   if (length(sex) == 2) {
-    g <- ggplot(data = x2, aes(x = LYL, y = pos, color = sex)) +
+    g <- ggplot(data = x2, aes(x = LYL, y = pos, color = sex, text = text)) +
       geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
       geom_point(position = pd) +
       geom_errorbarh(aes(xmin = LYL_L, xmax = LYL_R), height = 0.13, position = pd)
   } else {
-    g <- ggplot(data = x2, aes(x = LYL, y = pos)) +
+    g <- ggplot(data = x2, aes(x = LYL, y = pos, text = text)) +
       geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
       geom_point() +
       geom_errorbarh(aes(xmin = LYL_L, xmax = LYL_R), height = 0.13)
   }
 
-  g +
+  gg <- g +
     scale_y_discrete(drop = FALSE, breaks = list_clean, labels = list_dx_included) +
-    ylab(NULL) + xlab(paste0("Life Years Lost due to ", tolower(causes), " causes")) +
-    theme_bw() +
-    theme(
-      legend.title = element_blank(),
-      axis.text.y = element_text(hjust = 0, size = 11, vjust = 0.36)
-    )
+    ylab(NULL) + xlab(paste0("Life Years Lost due to ", tolower(causes), " causes"))
+
+  ggplotly2(gg)
 }
 
 
@@ -1520,21 +1458,86 @@ plot_mrr_air <- function(dx, list_dx_included, list_clean) {
       by = c("id")
     ) %>%
     mutate(
-      cod = factor(cod, levels = c("Air_adjusted", "Air_not_adjust"), labels = c("Adjusted for air pollution", "Not adjusted"))
+      cod = factor(cod, levels = c("Air_adjusted", "Air_not_adjust"), labels = c("Adjusted for air pollution", "Not adjusted")),
+      text = paste0(
+        format_ci(HR, CI_left, CI_right, n = 1), "\n", pos
+      )
     )
 
-  ggplot(data = x, aes(y = pos, color = cod)) +
+  g <- ggplot(data = x, aes(y = pos, color = cod)) +
     geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
-    geom_point(aes(x = HR), position = pd) +
+    geom_point(aes(x = HR, text = text), position = pd) +
     geom_errorbarh(aes(xmin = CI_left, xmax = CI_right), position = pd) +
     scale_x_log10(breaks = c(0.2, 0.5, 0.8, 1, 1.2, 1.5, 3, 5, 10, 20, 40, 100, 150, 250)) +
     scale_y_discrete(drop = FALSE, breaks = list_clean, labels = list_dx_included) +
     ylab(NULL) +
-    xlab(paste0("Mortality Rate Ratios for all causes (95% CI)")) +
-    theme_bw() +
-    theme(
-      legend.title = element_blank(),
-      legend.position = "top",
-      axis.text.y = element_text(hjust = 0, size = 11, vjust = 0.36)
+    xlab(paste0("Mortality Rate Ratios for all causes (95% CI)"))
+
+  ggplotly2(g) %>%
+    layout(
+      legend = list(
+        title = "", orientation = "h",
+        y = 1, yanchor = "bottom",
+        x = 0.5, xanchor = "center"
+      )
     )
+}
+
+
+
+cis_by_chapter <- function(data, est, lower, upper, text, ytitle) {
+  panel <- . %>%
+    plot_ly(showlegend = FALSE) %>%
+    add_markers(
+      y = string_to_formula(est),
+      x = ~-pos,
+      text = string_to_formula(text),
+      hoverinfo = "text",
+      color = I("black"),
+      alpha = 0.2,
+      error_y = list(
+        type = "data",
+        symmetric = FALSE,
+        array = data[[upper]] - data[[est]],
+        arrayminus = data[[est]] - data[[lower]],
+        thickness = 1
+      )
+    ) %>%
+    # TODO: overlay chapter level summary
+    #add_segments(
+    #  x = ~min(-pos), xend = ~max(-pos),
+    #  y = ~unique(LYL_chap), yend = ~unique(LYL_chap)
+    #) %>%
+    config(displayModeBar = FALSE) %>%
+    layout(
+      yaxis = list(
+        zeroline = FALSE,
+        title = ytitle
+      ),
+      xaxis = list(
+        title = "",
+        ticktext = ~unique(description),
+        tickvals = ~mean(-pos),
+        tickangle = 45,
+        zeroline = FALSE,
+        showgrid = FALSE
+      )
+    )
+
+  data %>%
+    group_by(chapter) %>%
+    do(p = panel(.)) %>%
+    subplot(
+      nrows = 1, margin = 0.01,
+      shareY = TRUE, titleY = TRUE,
+      titleX = TRUE
+    ) %>%
+    layout(
+      legend = list(orientation = "h"),
+      shapes = hline(y = 1, dash = "dot", color = toRGB("gray90"))
+    )
+}
+
+string_to_formula <- function(x) {
+  rlang::new_formula(NULL, rlang::sym(x))
 }
