@@ -20,7 +20,7 @@ h6 <- function(...) {
 fixedPage(
   theme = bs_theme(
     version = 4,
-    base_font = font_google("Roboto Slab", wght = c(300, 400))
+    base_font = font_google("Roboto Slab", wght = "100..900")
   ),
   titlePanel("Atlas of Disease Mortality (beta version)"),
   useShinyjs(),
@@ -306,7 +306,7 @@ fixedPage(
                   ))
                 )
               ),
-              plotlyOutput2("LYLplot999"),
+              plotlyOutput2("LYLplot999", height = 350),
               htmlOutput("text_survival999"),
               hr()
             )),

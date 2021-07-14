@@ -4,7 +4,12 @@ ggplotly2 <- function(p, ..., tooltip = "text") {
     config(displayModeBar = FALSE) %>%
     layout(
       xaxis = list(fixedrange = TRUE),
-      yaxis = list(fixedrange = TRUE)
+      yaxis = list(fixedrange = TRUE),
+      legend = list(
+        title = "", orientation = "h",
+        y = 1, yanchor = "bottom",
+        x = 0.5, xanchor = "center"
+      )
     )
 }
 
@@ -151,11 +156,7 @@ plot_mortality <- function(dx) {
     style(mode = "markers+lines", line.dash = "dot") %>%
     layout(
       hovermode = "x",
-      legend = list(
-        title = "", orientation = "h",
-        y = 1.15, yanchor = "bottom",
-        x = 0.5, xanchor = "center"
-      )
+      legend = list(y = 1.15)
     )
 
   gg$x$data <- lapply(gg$x$data, function(tr) {
@@ -211,9 +212,10 @@ plot_age_death <- function(dx, smooth) {
 
   g <- ggplot(x, aes(x = age, y = density_death)) +
     xlab("Age in years") +
-    ylab("Distribution of age of death among the diagnosed (density)") +
+    ylab("Distribution of age of death\namong the diagnosed (density)") +
     scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
-    facet_grid(~sex, drop = FALSE)
+    facet_grid(~sex, drop = FALSE) +
+    theme(axis.title.y = element_text(size = 9.5))
 
   if (smooth) {
     g <- g + geom_smooth(color = "black", se = FALSE) +
@@ -224,7 +226,8 @@ plot_age_death <- function(dx, smooth) {
 
   withr::with_options(
     list(digits = 1),
-    ggplotly2(g, tooltip = c("y", "x"))
+    ggplotly2(g, tooltip = c("y", "x")) %>%
+      layout(margin = list(l = 70))
   )
 }
 
@@ -451,17 +454,14 @@ plot_LYLages <- function(dx) {
     scale_y_continuous(limits = c(0, NA)) +
     facet_grid(~sex) +
     xlab("Age in years") +
-    ylab("Remaining life expectancy after diagnosis (in years)")
+    ylab("Remaining life expectancy\nafter diagnosis (in years)")
 
   gg <- ggplotly2(g) %>%
     style(hovertemplate = "%{customdata}<extra></extra>") %>%
     layout(
       hovermode = "x",
-      legend = list(
-        title = "", orientation = "h",
-        y = 1.15, yanchor = "bottom",
-        x = 0.5, xanchor = "center"
-      )
+      legend = list(y = 1.15),
+      margin = list(l = 80)
     )
 
   gg$x$data <- lapply(gg$x$data, function(tr){
@@ -552,48 +552,39 @@ plot_LYLplot <- function(dx, age, cause) {
     ) %>%
     distinct()
 
-  LYLplot2 <- LYLplot %>% filter(pct == as.numeric(substr(age, 2, 3)))
+  LYLplot2 <- LYLplot %>%
+    filter(pct == as.numeric(substr(age, 2, 3)))
   min_age <- min(LYLplot2$time)
 
-  ref <- LYLplot2 %>%
-    filter(cause == "Alive") %>%
-    mutate(
-      group2 = ifelse(group == "Entire Danish population", "Diagnosed with the disorder", "Entire Danish population")
-    ) %>%
-    mutate(group = group2, linetype = "Survival curve in\nthe other group") %>%
-    select(-group2)
-
-  # TODO: maybe use 'native' stacked area charts?
-  g <- ggplot(LYLplot2, aes(x = time, y = 100 * cip, fill = cause)) +
-    geom_area(alpha = 0.6, size = 0.3, color = "black", position = position_stack(rev = T)) +
-    geom_line(data = ref, aes(x = time, y = 100 * cip, linetype = linetype)) +
-    facet_grid(group ~ sex, drop = FALSE) +
+  g <- ggplot() +
+    facet_wrap(~sex, drop = FALSE) +
     xlab("Age in years") +
-    ylab("Percentage of persons alive") +
-    scale_x_continuous(breaks = c(min_age, seq(0, 100, 10))) +
-    scale_linetype_manual(
-      name = "",
-      values = "dashed"
-    )
+    ylab("Percentage of persons dead") +
+    scale_x_continuous(breaks = c(min_age, seq(0, 100, 10)))
 
   if (cause == "All causes") {
-    g <- g +
-      scale_fill_manual(
-        name = "",
-        breaks = c("Alive", "Dead (all causes)"),
-        values = c("white", "red")
-      )
+    g <- g + geom_line(
+      data = LYLplot2 %>%
+        filter(cause == "Dead (all causes)"),
+      aes(x = time, y = 100 * cip, color = group)
+    )
   } else {
-    g <- g +
-      scale_fill_manual(
-        name = "",
-        breaks = c("Alive", "Dead (natural causes)", "Dead (external causes)", "Dead (all causes)"),
-        values = c("white", "#7fc97f", "#beaed4", "red")
-      )
+    g <- g + geom_line(
+      data = LYLplot2 %>%
+        mutate(cause = recode(cause, "Dead (external causes)" = " External", "Dead (natural causes)" = " Natural")) %>%
+        filter(cause %in% c(" External", " Natural")),
+      aes(x = time, y = 100 * cip, color = group, linetype = cause)
+    )
   }
 
-  g <- g +
-    guides(linetype = guide_legend(order = 2), fill = guide_legend(order = 1))
+  g <- ggplotly2(g, tooltip = c("y", "x")) %>%
+    style(hovertemplate = "%{y:.1f}%") %>%
+    layout(
+      hovermode = "x",
+      xaxis = list(hoverformat = ".1f"),
+      xaxis2 = list(hoverformat = ".1f"),
+      legend = list(y = 1.1)
+    )
 
   # Text for interpretation
   check <- list_dx %>%
@@ -681,7 +672,7 @@ plot_LYLplot <- function(dx, age, cause) {
 
   text <- HTML("<div style='background-color:#E5E4E2'>", text, "</div>")
 
-  list(g = ggplotly2(g) %>% layout(showlegend = FALSE), text = text)
+  list(g = g, text = text)
 }
 
 interpretation_main <- function(dx) {
@@ -1324,21 +1315,19 @@ plot_all <- function(dx, sex, causes, list_dx_included, list_clean) {
       geom_col()
   }
 
+
   g00 <- g +
     scale_x_continuous(labels = scales::comma) +
-    scale_y_discrete(drop = FALSE, breaks = list_clean, labels = list_dx_included) +
-    ylab(NULL) + xlab("Number of diagnosed in 1995-2018 (in thousands)") +
-    theme(
-      legend.title = element_blank(),
-      legend.position = "top",
-      axis.text.y = element_text(hjust = 0, size = 11, vjust = 0.36)
-    )
+    scale_y_discrete(drop = FALSE, breaks = list_clean, labels = format_dx_labels(list_dx_included)) +
+    ylab(NULL) + xlab("Number of diagnosed in 1995-2018 (in thousands)")
 
   subplot2(
     g00,
     plot_mrr_all(dx, sex, causes, list_dx_included, list_clean) %>%
+      style(showlegend = FALSE) %>%
       layout(yaxis = list(showticklabels = FALSE)),
     plot_lyl_all(dx, sex, causes, list_dx_included, list_clean) %>%
+      style(showlegend = FALSE) %>%
       layout(yaxis = list(showticklabels = FALSE))
   )
 }
@@ -1386,12 +1375,9 @@ plot_mrr_all <- function(dx, sex, causes, list_dx_included, list_clean) {
 
   gg <- g +
     scale_x_log10(breaks = c(0.2, 0.5, 0.8, 1, 1.2, 1.5, 3, 5, 10, 20, 40, 100, 150, 250)) +
-    scale_y_discrete(drop = FALSE, breaks = list_clean, labels = list_dx_included) +
-    ylab(NULL) + xlab(paste0("Mortality Rate Ratios for ", tolower(causes), " causes (95% CI)")) +
-    theme(
-      legend.title = element_blank(),
-      axis.text.y = element_text(hjust = 0, size = 11, vjust = 0.36)
-    )
+    scale_y_discrete(drop = FALSE, breaks = list_clean, labels = format_dx_labels(list_dx_included)) +
+    ylab(NULL) + xlab(paste0("Mortality Rate Ratios for ", tolower(causes), " causes (95% CI)"))
+
   ggplotly2(gg)
 }
 
@@ -1443,7 +1429,7 @@ plot_lyl_all <- function(dx, sex, causes, list_dx_included, list_clean) {
   }
 
   gg <- g +
-    scale_y_discrete(drop = FALSE, breaks = list_clean, labels = list_dx_included) +
+    scale_y_discrete(drop = FALSE, breaks = list_clean, labels = format_dx_labels(list_dx_included)) +
     ylab(NULL) + xlab(paste0("Life Years Lost due to ", tolower(causes), " causes"))
 
   ggplotly2(gg)
@@ -1469,18 +1455,11 @@ plot_mrr_air <- function(dx, list_dx_included, list_clean) {
     geom_point(aes(x = HR, text = text), position = pd) +
     geom_errorbarh(aes(xmin = CI_left, xmax = CI_right), position = pd) +
     scale_x_log10(breaks = c(0.2, 0.5, 0.8, 1, 1.2, 1.5, 3, 5, 10, 20, 40, 100, 150, 250)) +
-    scale_y_discrete(drop = FALSE, breaks = list_clean, labels = list_dx_included) +
+    scale_y_discrete(drop = FALSE, breaks = list_clean, labels = format_dx_labels(list_dx_included)) +
     ylab(NULL) +
     xlab(paste0("Mortality Rate Ratios for all causes (95% CI)"))
 
-  ggplotly2(g) %>%
-    layout(
-      legend = list(
-        title = "", orientation = "h",
-        y = 1, yanchor = "bottom",
-        x = 0.5, xanchor = "center"
-      )
-    )
+  ggplotly2(g)
 }
 
 
@@ -1533,11 +1512,19 @@ cis_by_chapter <- function(data, est, lower, upper, text, ytitle) {
       titleX = TRUE
     ) %>%
     layout(
-      legend = list(orientation = "h"),
-      shapes = hline(y = 1, dash = "dot", color = toRGB("gray90"))
+      shapes = hline(y = 1, dash = "dash", color = toRGB("red"))
     )
 }
 
 string_to_formula <- function(x) {
   rlang::new_formula(NULL, rlang::sym(x))
+}
+
+
+format_dx_labels <- function(x) {
+  idx <- grepl("^-", x)
+  if (!any(idx)) return(x)
+
+  x[!idx] <- paste0("<b>", x[!idx], "</b>")
+  sub("^-\\s*", "", x)
 }
