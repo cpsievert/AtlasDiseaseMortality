@@ -412,6 +412,8 @@ function(input, output, session) {
         pos = factor(id, levels = rev(labels$id), labels = rev(labels$description))
       )
 
+    browser()
+
     output$MRR_LYL_all999 <- renderPlotly({
       plot_all(
         dx = x, sex = sex, causes = input$cod999, list_dx_included = input$diseases_all999,

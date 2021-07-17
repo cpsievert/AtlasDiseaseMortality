@@ -66,44 +66,48 @@ format_numbers <- function(x, n = 1) {
   )
 }
 
-cis_by_category <- function(data, ytitle) {
+cis_by_category <- function(data, ytitle, show_ci = FALSE) {
+
   panel <- function(d) {
-    plot_ly(d, showlegend = FALSE) %>%
-    add_markers(
-      y = ~est,
-      x = ~jitter(rep(1, nrow(d))),
-      text = ~text,
-      hoverinfo = "text",
-      color = I("black"),
-      alpha = 0.2,
-      error_y = list(
+    error_y <- if (show_ci) {
+      list(
         type = "data",
         symmetric = FALSE,
         array = ~(upper - est),
         arrayminus = ~(est - lower),
         thickness = 1
       )
-    ) %>%
-    # TODO: overlay chapter level summary
-    #add_segments(
-    #  x = ~min(-pos), xend = ~max(-pos),
-    #  y = ~unique(LYL_chap), yend = ~unique(LYL_chap)
-    #) %>%
-    config(displayModeBar = FALSE) %>%
-    layout(
-      yaxis = list(
-        zeroline = FALSE,
-        title = ytitle
-      ),
-      xaxis = list(
-        title = "",
-        ticktext = ~unique(group),
-        tickvals = 1,
-        tickangle = 45,
-        zeroline = FALSE,
-        showgrid = FALSE
+    }
+    plot_ly(d, showlegend = FALSE) %>%
+      add_markers(
+        y = ~est,
+        x = ~jitter(rep(1, nrow(d))),
+        text = ~text,
+        hoverinfo = "text",
+        color = I("black"),
+        alpha = 0.2,
+        error_y = error_y
+      ) %>%
+      # TODO: overlay chapter level summary
+      #add_segments(
+      #  x = ~min(-pos), xend = ~max(-pos),
+      #  y = ~unique(LYL_chap), yend = ~unique(LYL_chap)
+      #) %>%
+      config(displayModeBar = FALSE) %>%
+      layout(
+        yaxis = list(
+          zeroline = FALSE,
+          title = ytitle
+        ),
+        xaxis = list(
+          title = "",
+          ticktext = ~unique(as.character(group)),
+          tickvals = 1,
+          tickangle = 45,
+          zeroline = FALSE,
+          showgrid = FALSE
+        )
       )
-    )
   }
 
   data %>%
@@ -121,4 +125,10 @@ cis_by_category <- function(data, ytitle) {
 
 string_to_formula <- function(x) {
   rlang::new_formula(NULL, rlang::sym(x))
+}
+
+read_table <- function(file, ...) {
+  tibble::as_tibble(
+    data.table::fread(file = file, sep = " ", header = TRUE, ...)
+  )
 }
