@@ -5,10 +5,9 @@ library(htmltools)
 library(dplyr)
 library(plotly)
 library(scales)
+library(rlang)
 #library(shinyalert)
 #library(egg)
-
-source("R/AuxFunctions.R", local = TRUE)
 
 theme_set(theme_bw(base_family = "Roboto Slab"))
 thematic::thematic_shiny(font = "Roboto Slab")
@@ -29,7 +28,6 @@ gmc_broad <- disorders %>%
 gmc_specific <- disorders %>%
   filter(id %in% (100000 + c(2:8, 10:12, 14, 15, 17:20, 22, 23, 25, 26, 28:30, 32:39)))
 
-
 MRR <- readRDS("data/MRR.rds")
 MRRlagged <- readRDS("data/MRRlagged.rds")
 MRRage <- readRDS("data/MRRage.rds")
@@ -45,38 +43,78 @@ incidence0 <- filter(incidence, id == 0)
 
 
 ui <- fluidPage(
-  div(
-    style = "display:flex;justify-content:space-around",
-    selectInput("summary", "Summary type", c(
-      "IDC Chapters" = "idc",
-      "General Medical Conditions" = "gmc"
-    )),
-    selectInput("sex", "Sex", c("Persons" = "All", "Men Only" = "Males", "Women Only" = "Females", "Men vs Women" = "M/F")),
-    selectInput("cause", "Cause", unique(MRR$cause)),
-    #checkboxInput("air", "")
-  ),
-  div(
-    style = "display:flex;flex-direction:column;align-items:center",
-    plotlyOutput("overview", width = "80%"),
-    br(),
-    div(
-      style = "display:flex;justify-content:center",
-      checkboxInput("show_ci", "Show 95% CI", FALSE),
-      selectInput(
-        "disorder_id", NULL,
-        c("Search for a disorder" = "", setNames(disorders$id, disorders$description)),
-        selected = 1001
+  theme = bs_theme(
+    version = 5,
+    base_font = font_google("Roboto Slab", wght = "100..900")
+  ) %>%
+    # TODO: bslib should handle this
+    bs_add_rules(".accordion h2 {margin-top: 0}"),
+  navs_pill(
+    id = "pills",
+    header = div(
+      style = "display:flex;justify-content:space-around;margin-top:2rem",
+      selectInput("sex", "Sex", c("Persons" = "All", "Men Only" = "Males", "Women Only" = "Females", "Men vs Women" = "M/F")),
+      selectInput("cause", "Cause", unique(MRR$cause)),
+      checkboxInput("show_ci", "Show 95% CI", FALSE)
+    ),
+    nav_spacer(),
+    nav(
+      "IDC chapters", value = "idc",
+      overviewUI(
+        "idc",
+        "Mortality measures for all IDC Chapters",
+        "Mortality rate ratios within subchapters",
+        "Life years lost within subchapters"
       )
     ),
-    plotlyOutput("mrr",  width = "90%"),
-    plotlyOutput("lyl",  width = "90%"),
-    plotlyOutput("disorder_mrr", width = "70%")
+    nav(
+      "General conditions", value = "gmc",
+      overviewUI(
+        "gmc",
+        "Mortality measures for all general medical conditions",
+        "Mortality rate ratios within general medical conditions",
+        "Life years lost within general medical conditions"
+      )
+    ),
+    nav(
+      "Individual", value = "individual",
+      div(
+        style = "display:flex;flex-direction:column;align-items:center",
+        div(
+          style = "display:flex;justify-content:center",
+          selectInput(
+            "disorder_id", NULL,
+            c("Search for a disorder" = "", setNames(disorders$id, disorders$description))
+          )
+        )
+      ),
+      # TODO: why does crosstalk break on redraw with uiOutput()?
+      conditionalPanel(
+        "input.disorder_id !== ''",
+        tagList(
+          uiOutput("disorder_summary"),
+          accordion(
+            accordion_item(
+              "Mortality rate by age", show = TRUE,
+              plotlyOutput("disorder_mrr")
+            )
+          )
+        )
+
+      )
+    ),
+    nav_spacer()
   )
 )
 
+
 server <- function(input, output, session) {
 
-  is_gmc_view <- reactive(identical(input$summary, "gmc"))
+  # ----------------------------------------------------
+  # Reactive building blocks
+  # ----------------------------------------------------
+
+  is_gmc_view <- reactive(identical(input$pills, "gmc"))
 
   ids_broad <- reactive({
     if (is_gmc_view()) gmc_broad$id else chapters$id
@@ -89,91 +127,72 @@ server <- function(input, output, session) {
     if (identical(input$sex, "M/F")) c("Males", "Females") else input$sex
   })
 
-  output$overview <- renderPlotly({
-    counts <- filter(DX, id %in% ids_broad(), sex %in% sex()) %>%
+  cause <- reactive(tolower(input$cause))
+  show_ci <- reactive(isTRUE(input$show_ci))
+
+  MRR_ <- reactive({
+    filter(MRR, sex %in% sex(), cause %in% input$cause) %>%
+      mutate(y = if (is_gmc_view()) desc else chapter_label) %>%
+      distinct()
+  })
+  MRR_broad <- reactive(filter(MRR_(), id %in% ids_broad()))
+  MRR_specific <- reactive({
+    filter(MRR_(), id %in% ids_specific()) %>%
+      mutate(group = if (is_gmc_view()) gmc else as.roman(chapter))
+  })
+
+  LYL_ <- reactive({
+    filter(LYL, sex %in% sex(), cause %in% input$cause) %>%
+      mutate(y = if (is_gmc_view()) desc else chapter_label) %>%
+      distinct()
+  })
+  LYL_broad <- reactive(filter(LYL_(), id %in% ids_broad()))
+  LYL_specific <- reactive({
+    filter(LYL_(), id %in% ids_specific()) %>%
+      mutate(group = if (is_gmc_view()) gmc else as.roman(chapter))
+  })
+
+  # TODO: does this need to be filtered by cause of death?
+  counts <- reactive({
+    filter(DX, id %in% ids_broad(), sex %in% sex()) %>%
       mutate(y = if (is_gmc_view()) desc_EN else chapter_label)
-    mrr <- filter(MRR, id %in% ids_broad(), sex %in% sex(), cause %in% input$cause) %>%
-      mutate(y = if (is_gmc_view()) desc_EN else chapter_label)
-    lyl <- filter(LYL, id %in% ids_broad(), sex %in% sex(), cause %in% input$cause) %>%
-      mutate(y = if (is_gmc_view()) desc_EN else chapter_label)
+  })
 
-    p_counts <- ggplot(counts, aes(y = y, x = n / 1000, text = desc_EN)) +
-      scale_x_continuous(labels = scales::comma) +
-      ylab(NULL) + xlab("Number of diagnosed in 1995-2018 (in thousands)")
+  # ----------------------------------------------------
+  # IDC and GMC overview tabs (implemented as modules in R/overview.R)
+  # ----------------------------------------------------
 
-    p_mrr <- ggplot(mrr, aes(x = est, y = y, text = text)) +
-      geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
-      scale_x_log10(breaks = c(0.2, 0.5, 0.8, 1, 1.2, 1.5, 3, 5, 10, 20, 40, 100, 150, 250)) +
-      ylab(NULL) + xlab(paste0("Mortality Rate Ratios for ", tolower(input$cause), " causes"))
+  overviewServer(
+    "gmc", counts, MRR_broad, LYL_broad, MRR_specific, LYL_specific,
+    sex, cause, show_ci, jitter = FALSE
+  )
+  overviewServer(
+    "idc", counts, MRR_broad, LYL_broad, MRR_specific, LYL_specific,
+    sex, cause, show_ci,
+  )
 
-    p_lyl <- ggplot(lyl, aes(x = est, y = y,  text = text)) +
-      geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
-      ylab(NULL) + xlab(paste0("Life Years Lost due to ", tolower(input$cause), " causes"))
+  # Clicking on any of the overview plots takes you to details # for an individual disorder
+  observe({
+    disorder_id <- event_data("plotly_click", source = "display_disorder")$customdata
+    if (!length(disorder_id)) return()
+    updateSelectizeInput(session, "disorder_id", selected = disorder_id)
+    nav_select("pills", "individual")
+  })
 
-    if (length(sex) == 2) {
-      p_counts <- p_counts + geom_col(aes(color = sex), position = "dodge")
-      # TODO: need to fix position?
-      p_mrr <- p_mrr + geom_point(aes(color = sex))
-      p_lyl <- p_lyl + geom_point(aes(color = sex))
-      if (input$show_ci) {
-        p_mrr <- p_mrr + geom_errorbarh(aes(color = sex, xmin = lower, xmax = upper))
-        p_lyl <- p_lyl + geom_errorbarh(aes(color = sex, xmin = lower, xmax = upper))
-      }
-    } else {
-      p_counts <- p_counts + geom_col()
-      p_mrr <- p_mrr + geom_point()
-      p_lyl <- p_lyl + geom_point()
-      if (input$show_ci) {
-        p_mrr <- p_mrr + geom_errorbarh(aes(xmin = lower, xmax = upper))
-        p_lyl <- p_lyl + geom_errorbarh(aes(xmin = lower, xmax = upper))
-      }
-    }
 
-    subplot2(
-      p_counts,
-      ggplotly2(p_mrr) %>%
-        style(showlegend = FALSE) %>%
-        layout(yaxis = list(showticklabels = FALSE)),
-      ggplotly2(p_lyl) %>%
-        style(showlegend = FALSE) %>%
-        layout(yaxis = list(showticklabels = FALSE)),
-      titleX = TRUE
+  # ----------------------------------------------------
+  # Info for a particular disorder
+  # ----------------------------------------------------
+
+
+  output$disorder_summary <- renderUI({
+    d <- filter(DX, id == input$disorder_id, sex == sex())
+    txt <- glue::glue_data(
+      d, "A total of {scales::comma(n)} {ifelse(sex == 'All', 'persons', tolower(sex))} living in Denmark in 2000-2018 were diagnosed for the first time with disorder '{desc_EN}' in a hospital in 1995-2018. The median age at diagnosis was {dx_median} years, while 25% of the diagnosed were younger than {p25}"
     )
+    div(class = "lead py-1", txt)
   })
 
-
-  output$mrr <- renderPlotly({
-
-    # TODO: how to handle the gmc case?
-    dat <- MRR %>%
-      filter(id %in% ids_specific(), sex %in% sex(), cause %in% input$cause) %>%
-      mutate(group = as.roman(chapter)) %>%
-      # TODO: why are there repeated values?
-      distinct()
-
-    ytitle <- paste0("Mortality Rate Ratios for ", tolower(input$cause), " causes")
-
-    cis_by_category(dat, ytitle = ytitle, input$show_ci) %>%
-      layout(
-        yaxis = list(type = "log", range = log10(c(0.3, 180)))
-      )
-  })
-
-  output$lyl <- renderPlotly({
-    # TODO: how to handle the gmc case?
-    dat <- LYL %>%
-      filter(id %in% ids_specific(), sex %in% sex(), cause %in% input$cause) %>%
-      mutate(group = as.roman(chapter)) %>%
-      # TODO: why are there repeated values?
-      distinct()
-
-    ytitle <- paste0("Life Years Lost due to ", tolower(input$cause), " causes")
-
-    cis_by_category(dat, ytitle = ytitle, input$show_ci) %>%
-      layout(
-        yaxis = list(type = "log", range = log10(c(0.3, 180)))
-      )
-  })
 
   output$disorder_mrr <- renderPlotly({
     req(input$disorder_id)
@@ -193,51 +212,15 @@ server <- function(input, output, session) {
         death_rate_left = 10000 * death_rate_left,
         death_rate_right = 10000 * death_rate_right,
         text = paste0(
-          "Rate: ", format_ci(death_rate, death_rate_left, death_rate_right, n = 1), "\n",
-          "Age: ", age_group + 2.5
+          format_ci(death_rate, death_rate_left, death_rate_right, n = 1)
         ),
         color = ifelse(id == 1, "Diagnosed with the disorder", "Entire Danish population")
       )
 
-    rates <- ggplot(d, aes(x = age_group + 2.5, y = death_rate, group = color, color = color)) +
-      geom_point(aes(customdata = text)) +
-      geom_errorbar(aes(ymin = death_rate_left, ymax = death_rate_right), width = 0.1) +
-      xlab("Age in years") +
-      ylab("Mortality rates (per 10,000 person-years)") +
-      scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100))
-
-    rates <- ggplotly2(rates) %>%
-      style(mode = "markers+lines", line.dash = "dot", line.width = 1)
-
-    browser()
-    ratios <- ggplot(
-      filter(MRRage, id == input$disorder_id, sex %in% sex(), cause %in% input$cause),
-      aes(x = age_group + 2.5, y = est)) +
-      geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
-      geom_point(aes(customdata = ci)) +
-      geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.1) +
-      xlab("Age in years") +
-      ylab("Mortality rate ratio") +
-      scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
-      scale_y_log10()
-
-    ratios <- ggplotly2(ratios) %>%
-      style(mode = "markers+lines", line.dash = "dot", line.width = 1)
-
-    gg <- subplot2(rates, ratios, titleX = TRUE, titleY = TRUE, margin = 0.03) %>%
-      layout(
-        hovermode = "x",
-        legend = list(y = 1.15)
-      )
-
-    gg$x$data <- lapply(gg$x$data, function(tr) {
-      #if (!length(tr$error_y)) {
-        tr$hovertemplate <- "%{customdata}<extra></extra>"
-      #}
-      tr
-    })
-
-    gg
+    mrr_by_age(
+      dat_rates = d,
+      dat_ratios = filter(MRRage, id == input$disorder_id, sex %in% sex(), cause %in% input$cause)
+    )
   })
 
 }

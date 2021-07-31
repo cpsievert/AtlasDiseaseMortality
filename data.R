@@ -1,7 +1,6 @@
 library(dplyr)
 
-
-source("R/AuxFunctions.R", local = TRUE)
+source("R/utils.R", local = TRUE)
 
 DX <- read_table("data-raw/list_dx.txt") %>%
   arrange(chapter, start, level) %>%
@@ -25,11 +24,27 @@ DX <- read_table("data-raw/list_dx.txt") %>%
 
 saveRDS(DX, "data/DX.rds")
 
+gmc_map <- list(
+  "Circulatory system" = c("Hypertension", "Dislipidemia", "Ischemic heart disease", "Atrial fibrillation", "Heart failure", "Peripheral artery occlusive disease", "Stroke"),
+  "Endocrine system" = c("Diabetes Mellitus", "Thyroid disorder", "Gout"),
+  "Pulmonary system and allergy" = c("Chronic pulmonary disease", "Allergy"),
+  "Gastrointestinal system" = c("Ulcer/chronic gastritis", "Chronic liver disease", "Inflamatory bowel disease", "Diverticular disease of intestine"),
+  "Urogenital system" = c("Chronic kidney disease","Prostate disorders"),
+  "Musculoskeletal system" = c("Connective tissue disorders", "Osteoporosis"),
+  "Hematological system" = c("HIV/AIDS", "Anemias"),
+  "Cancers" = "Cancers",
+  "Neurological system" = c("Vision problem", "Hearing problem", "Migraine", "Epilepsy", "Parkinson's disease", "Multiple sclerosis", "Neuropathies"),
+  "Mental disorders" = "Mental disorders"
+)
+
+gmc_map <- tidyr::unnest(tibble::enframe(gmc_map, "gmc", "desc"))
+
 
 read_table("data-raw/MRR.txt") %>%
   select(id, sex, cause = cod, est = HR, lower = CI_left, upper = CI_right) %>%
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
   left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
+  left_join(gmc_map, by = "desc") %>%
   mutate(text = paste0(ci, "\n", desc)) %>%
   saveRDS("data/MRR.rds")
 
@@ -38,17 +53,15 @@ read_table("data-raw/MRR.txt") %>%
 read_table("data-raw/MRRlagged.txt") %>%
   select(id, sex, cause = cod, exposure, est = HR, lower = CI_left, upper = CI_right) %>%
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
-  left_join(select(DX, id, desc_EN), by = "id") %>%
+  left_join(select(DX, id, desc = desc_EN), by = "id") %>%
+  left_join(gmc_map, by = "desc") %>%
   saveRDS("data/MRRlagged.rds")
 
 
 read_table("data-raw/MRRage.txt") %>%
-  mutate(
-    age_cat = paste0(age_group, "-", age_group + age_categories)
-  ) %>%
-  select(id, sex, cause = cod, age_cat, est = HR, lower = CI_left, upper = CI_right) %>%
+  select(id, sex, cause = cod, age_group, est = HR, lower = CI_left, upper = CI_right) %>%
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
-  left_join(select(DX, id, desc_EN), by = "id") %>%
+  left_join(select(DX, id, desc = desc_EN), by = "id") %>%
   saveRDS("data/MRRage.rds")
 
 
@@ -63,6 +76,7 @@ bind_rows(
 ) %>%
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
   left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
+  left_join(gmc_map, by = "desc") %>%
   mutate(text = paste0(ci, "\n", desc)) %>%
   saveRDS("data/LYL.rds")
 
