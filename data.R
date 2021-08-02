@@ -94,6 +94,17 @@ bind_rows(
   left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
   saveRDS("data/LYLage.rds")
 
+read_table("data-raw/LYLages.txt") %>%
+  mutate(ci = format_ci(life_exp, life_exp_L, life_exp_R, n = 2)) %>%
+  select(id, age, sex, ci, est = life_exp, lower = life_exp_L, upper = life_exp_R) %>%
+  saveRDS("data/lifeExp.rds")
+
+# General population life expectancy by age
+read_table("data-raw/LYLages.txt") %>%
+  filter(id == 1) %>% # baseline
+  select(age, est = life_exp0, sex) %>%
+  saveRDS("data/lifeExp0.rds")
+
 
 read_table("data-raw/ages.txt") %>%
   saveRDS("data/ages.rds")

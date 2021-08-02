@@ -51,8 +51,10 @@ overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
   mrr <- highlight_key(mrr, ~y, "overview_plot")
   lyl <- highlight_key(lyl, ~y, "overview_plot")
 
+
   p_counts <- ggplot(counts, aes(y = y, x = n / 1000, text = desc_EN, customdata = id)) +
     scale_x_continuous(labels = scales::comma) +
+
     ylab(NULL) + xlab("Number of diagnosed in 1995-2018 (in thousands)")
 
   p_mrr <- ggplot(mrr, aes(x = est, y = y, text = text, customdata = id)) +
@@ -92,9 +94,19 @@ overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
       layout(yaxis = list(showticklabels = FALSE)),
     titleX = TRUE
   ) %>%
-    highlight("plotly_hover", debounce = 0.1)
+    highlight("plotly_hover", debounce = 0.1) %>%
+    layout(
+      annotations = list(
+        text = "Click for details on\n a particular disorder",
+        x = 0.1, y = 0.95,
+        xref = "paper", yref = "paper",
+        ax = 100, ay = 0,
+        font = list(size = 9)
+      )
+    )
 
   gg$x$source <- "display_disorder"
+
   gg
 }
 
@@ -189,9 +201,10 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
   ratios <- ggplotly2(ratios) %>%
     style(mode = "markers+lines", line.dash = "dot", line.width = 1)
 
-  gg <- subplot2(rates, ratios, titleX = TRUE, titleY = TRUE, margin = 0.03) %>%
+  gg <- subplot2(rates, ratios, titleX = TRUE, titleY = TRUE, margin = 0.04) %>%
     style(hoverinfo = "none") %>%
     layout(
+      showlegend = TRUE,
       hovermode = "x",
       legend = list(y = 1.15)
     )
@@ -199,7 +212,8 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
   highlight(
     gg, "plotly_hover", debounce = 0.1,
     selected = attrs_selected(
-      hovertemplate = "%{customdata}<extra></extra>"
+      hovertemplate = "%{customdata}<extra></extra>",
+      showlegend = FALSE
     )
   )
 }
