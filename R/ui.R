@@ -99,3 +99,27 @@ dropdown <- function(id, ..., selected = NULL) {
     )
   })
 }
+
+
+
+switchInput <- function(id, label, value = FALSE) {
+  div(
+    class = "form-check form-switch",
+    tags$input(
+      id = id, checked = if (value) NA,
+      type = "checkbox",
+      class = "form-check-input",
+      onclick = HTML(sprintf(
+        "Shiny.setInputValue(
+          '%s',
+          document.getElementById('%s').value
+        );", id, id
+      ))
+    ),
+    tags$label(
+      label,
+      `for` = id,
+      class = "form-check-label lead"
+    )
+  )
+}

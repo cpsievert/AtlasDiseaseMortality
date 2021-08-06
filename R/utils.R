@@ -14,7 +14,7 @@ format_ci <- function(est, lower, upper, n = 1, prefix = "") {
 
 format_numbers <- function(x, n = 1) {
   ifelse(
-    is.na(x), NA_character_, gsub(" ", "", format(round(x, n), nsmall = n))
+    is.na(x), NA_character_, gsub(" ", "", format(round(x, n), nsmall = n, big.mark = ","))
   )
 }
 

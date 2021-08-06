@@ -1,19 +1,17 @@
 summary_headline <- function(dx, dx_mrr, dx_lyl, input) {
-  sex <- input$sex_headline %||% "persons"
-
-  sex_ <- switch(sex, persons = "All", males = "Males", females = "Females")
+  sex_ <- input$sex_headline %||% "persons"
 
   dx <- filter(dx, sex %in% sex_)
   dx_mrr <- filter(dx_mrr, sex %in% sex_)
   dx_lyl <- filter(dx_lyl, sex %in% sex_)
 
-  drop <- dropdown('sex_headline', 'persons', 'males', 'females', selected = sex)
+  drop <- dropdown('sex_headline', 'persons', 'men', 'women', selected = sex_)
 
   template <- "A total of {Diagnosed} {drop} living in Denmark in 2000-2018 were diagnosed for the first time with disorder '{desc_EN}' in a hospital in 1995-2018."
 
   if (!is_na(dx$age_dx50)) {
     template <- paste0(
-      template, " The median age at diagnosis was {format_numbers(age_dx50, 1)} years, while 25% of the diagnosed were younger than {format_numbers(age_dx25, 1)} and 25% were older than {format_numbers(age_dx75, 1)} years at time of diagnosis. Among the diagnosed, {Deaths} {Persons} died in 2000-2018"
+      template, " The median age at diagnosis was {format_numbers(age_dx50, 1)} years, while 25% of the diagnosed were younger than {format_numbers(age_dx25, 1)} and 25% were older than {format_numbers(age_dx75, 1)} years at time of diagnosis. Among the diagnosed, {Deaths} {sex} died in 2000-2018"
     )
   }
 
@@ -47,6 +45,9 @@ summary_headline <- function(dx, dx_mrr, dx_lyl, input) {
                                                    of the diagnosed during the entire life (after diagnosis), which might be plausible for chronic disorders but not for acute ones."
     )
   }
+
+
+
 
   txt <- paste0(
     glue::glue_data(dx, template),

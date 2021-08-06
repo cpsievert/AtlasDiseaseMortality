@@ -32,7 +32,8 @@ overviewServer <- function(id, counts, MRR_broad, LYL_broad, MRR_specific, LYL_s
         ytitle = paste0(
           "Mortality Rate Ratios for ", cause(), " causes"
         ),
-        show_ci(), jitter
+        show_ci(),
+        jitter
       ) %>%
         layout(yaxis = list(type = "log"))
     })
@@ -43,9 +44,9 @@ overviewServer <- function(id, counts, MRR_broad, LYL_broad, MRR_specific, LYL_s
         ytitle = paste0(
           "Life Years Lost due to ", cause(), " causes"
         ),
-        show_ci(), jitter
-      ) %>%
-        layout(yaxis = list(type = "log"))
+        show_ci(),
+        jitter
+      )
     })
 
   })

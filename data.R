@@ -37,7 +37,10 @@ gmc_map <- list(
   "Mental disorders" = "Mental disorders"
 )
 
+saveRDS(gmc_map, "data/gmc_map.rds")
+
 gmc_map <- tidyr::unnest(tibble::enframe(gmc_map, "gmc", "desc"))
+
 
 
 read_table("data-raw/MRR.txt") %>%
@@ -48,13 +51,24 @@ read_table("data-raw/MRR.txt") %>%
   mutate(text = paste0(ci, "\n", desc)) %>%
   saveRDS("data/MRR.rds")
 
-
+wrap <- scales::wrap_format(60)
+exposure_map <- setNames(c("0-6 months", "6-12 months", "1-2 years", "2-5 years", "5-10 years", "10+ years"), 1:6)
 
 read_table("data-raw/MRRlagged.txt") %>%
   select(id, sex, cause = cod, exposure, est = HR, lower = CI_left, upper = CI_right) %>%
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
   left_join(select(DX, id, desc = desc_EN), by = "id") %>%
   left_join(gmc_map, by = "desc") %>%
+  mutate(
+    est_display = case_when(
+      est < 1 ~ paste0(format_numbers(100 * (1 - est)), "% lower"),
+      est < 2 ~ paste0(format_numbers(100 * (est - 1)), "% higher"),
+      TRUE ~ paste(format_numbers(est, 1), "times higher")
+    ),
+    x = recode(exposure, !!!exposure_map),
+    text = paste0(ci, "<br>", x),
+    customdata = wrap(glue::glue("{x} after an initial diagnosis, the diagnosed had an average mortality rate of <b>{est_display}</b> compared to those of same age and sex without that diagnosis (MRR = {ci})"))
+  ) %>%
   saveRDS("data/MRRlagged.rds")
 
 
@@ -97,12 +111,14 @@ bind_rows(
 read_table("data-raw/LYLages.txt") %>%
   mutate(ci = format_ci(life_exp, life_exp_L, life_exp_R, n = 2)) %>%
   select(id, age, sex, ci, est = life_exp, lower = life_exp_L, upper = life_exp_R) %>%
+  mutate(text = paste0(ci, "<br>", "Age: ", age)) %>%
   saveRDS("data/lifeExp.rds")
 
 # General population life expectancy by age
 read_table("data-raw/LYLages.txt") %>%
   filter(id == 1) %>% # baseline
   select(age, est = life_exp0, sex) %>%
+  mutate(text = paste0(est, "<br>", "Age: ", age)) %>%
   saveRDS("data/lifeExp0.rds")
 
 
