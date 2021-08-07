@@ -20,7 +20,9 @@ DX <- read_table("data-raw/list_dx.txt") %>%
       is.na(age_dx50), "-", paste0(format_numbers(age_dx50, 1), " (", format_numbers(age_dx25, 1), "-", format_numbers(age_dx75, 1), ")")),
     death_median = ifelse(
       is.na(age_death50), "-", paste0(format_numbers(age_death50, 1), " (", format_numbers(age_death25, 1), "-", format_numbers(age_death75, 1), ")"))
-  )
+  ) %>%
+  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
+  distinct()
 
 saveRDS(DX, "data/DX.rds")
 
@@ -49,6 +51,7 @@ read_table("data-raw/MRR.txt") %>%
   left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
   left_join(gmc_map, by = "desc") %>%
   mutate(text = paste0(ci, "\n", desc)) %>%
+  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/MRR.rds")
 
 wrap <- scales::wrap_format(60)
@@ -69,6 +72,7 @@ read_table("data-raw/MRRlagged.txt") %>%
     text = paste0(ci, "<br>", x),
     customdata = wrap(glue::glue("{x} after an initial diagnosis, the diagnosed had an average mortality rate of <b>{est_display}</b> compared to those of same age and sex without that diagnosis (MRR = {ci})"))
   ) %>%
+  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/MRRlagged.rds")
 
 
@@ -76,6 +80,7 @@ read_table("data-raw/MRRage.txt") %>%
   select(id, sex, cause = cod, age_group, est = HR, lower = CI_left, upper = CI_right) %>%
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
   left_join(select(DX, id, desc = desc_EN), by = "id") %>%
+  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/MRRage.rds")
 
 
@@ -92,6 +97,7 @@ bind_rows(
   left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
   left_join(gmc_map, by = "desc") %>%
   mutate(text = paste0(ci, "\n", desc)) %>%
+  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/LYL.rds")
 
 
@@ -106,12 +112,14 @@ bind_rows(
 ) %>%
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
   left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
+  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/LYLage.rds")
 
 read_table("data-raw/LYLages.txt") %>%
   mutate(ci = format_ci(life_exp, life_exp_L, life_exp_R, n = 2)) %>%
   select(id, age, sex, ci, est = life_exp, lower = life_exp_L, upper = life_exp_R) %>%
   mutate(text = paste0(ci, "<br>", "Age: ", age)) %>%
+  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/lifeExp.rds")
 
 # General population life expectancy by age
@@ -119,11 +127,14 @@ read_table("data-raw/LYLages.txt") %>%
   filter(id == 1) %>% # baseline
   select(age, est = life_exp0, sex) %>%
   mutate(text = paste0(est, "<br>", "Age: ", age)) %>%
+  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/lifeExp0.rds")
 
 
 read_table("data-raw/ages.txt") %>%
+  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/ages.rds")
 
 read_table("data-raw/incidence.txt") %>%
+  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/incidence.rds")
