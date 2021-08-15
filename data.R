@@ -50,7 +50,7 @@ read_table("data-raw/MRR.txt") %>%
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
   left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
   left_join(gmc_map, by = "desc") %>%
-  mutate(text = paste0(ci, "\n", desc)) %>%
+  mutate(text = paste0(ci, "\n", wrap(desc))) %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/MRR.rds")
 
@@ -96,7 +96,7 @@ bind_rows(
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
   left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
   left_join(gmc_map, by = "desc") %>%
-  mutate(text = paste0(ci, "\n", desc)) %>%
+  mutate(text = paste0(ci, "\n", wrap(desc))) %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/LYL.rds")
 

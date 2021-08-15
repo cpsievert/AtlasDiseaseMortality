@@ -22,8 +22,6 @@ theme_set(theme_bw(base_family = "Roboto Slab"))
 # thematic theme is set in user session based on UI state
 shiny::onStop(thematic::thematic_off)
 
-wrap <- scales::wrap_format(60)
-
 # Load list of diseases
 DX <- readRDS("data/DX.rds")
 
@@ -62,301 +60,324 @@ incidence0 <- filter(incidence, id == 0)
 # User interface
 # -----------------------------------------------------------------
 
+ui <- function(request) {
 
-THEME <- bs_theme(
-  version = 5, primary = "#ED3A3B",
-  "nav-pills-link-active-color" = "white",
-  base_font  = list(
-    font_google("Roboto Slab", wght = "100..900"),
-    font_google("Montserrat")
-  )
-) %>%
-  # TODO: bslib should do better
-  bs_add_rules(".accordion h2 {margin-top: 0}") %>%
-  bs_add_rules(
-    lapply(dir("scss", full.names = TRUE), sass::sass_file)
-  )
-
-
-HEAD <- withTags(head(
-  # TODO: remove noindex after publication
-  meta(name = "robots", content = "noindex"),
-  link(
-    href = "https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css",
-    rel = "stylesheet"
-  ),
-  script(src = "js/down-arrow.js")
-))
-
-
-
-down_arrow <- function(msg, href) {
-  div(
-    class = "py-3 down-arrow d-flex flex-row text-center text-primary",
-    style = "justify-content: center",
-    a(
-      href = href,
-      p(class = "lead", msg),
-      #p(style = "font-size: 5rem", "﹀")
-      tags$i(
-        style = "font-size: 2rem",
-        class = "fa fa-chevron-down lead"
-      )
+  THEME <- bs_theme(
+    version = 5, primary = "#ED3A3B",
+    "nav-pills-link-active-color" = "white",
+    base_font  = list(
+      font_google("Roboto Slab", wght = "100..900"),
+      font_google("Montserrat")
     )
-  )
-}
+  ) %>%
+    # TODO: bslib should do better
+    bs_add_rules(".accordion h2 {margin-top: 0}") %>%
+    bs_add_rules(
+      lapply(dir("scss", full.names = TRUE), sass::sass_file)
+    )
 
-INTRO <- withTags(
-  div(
-    id = "intro",
-    class = "container",
-    style = "height: 100vh; position:relative",
-    h2(
-      class = "mt-4 text-center",
-      style = "width: 100%; max-width: 900px; margin-left:auto; margin-right:auto",
-      "Atlas of Disease Mortality"
+
+  HEAD <- withTags(head(
+    # TODO: remove noindex after publication
+    meta(name = "robots", content = "noindex"),
+    link(
+      href = "https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css",
+      rel = "stylesheet"
     ),
-    hr(style = "width: 100%; max-width: 600px", class = "mx-auto"),
+    script(src = "js/down-arrow.js"),
+    script(src = "js/scroll-to.js")
+  ))
+
+
+
+  down_arrow <- function(msg, href) {
     div(
-      align = "center", class = "mt-4",
-      img(
-        style = "width: 100%; max-width: 600px",
-        src = "images/people.png"
-      )
-    ),
-    p(
-      class = "my-3 text-center text-secondary",
-      style = "width: 100%; max-width: 600px; margin-left:auto; margin-right:auto",
-      "A study by Oleguer Plana-Ripoll et. al."
-    ),
-    p(
-      class = "lead my-3 text-center",
-      style = "width: 100%; max-width: 700px; margin-left:auto; margin-right:auto",
-      "Abstract coming soon"
-    ),
-  div(
-    align = "center", class = "mt-5",
-    img(class = "img-fluid", src = "images/NBPlogo.jpg", width="250px")
-  ),
-  down_arrow("Explore", "#pills")
-  )
-)
-
-PILLS <- navs_pill(
-  id = "pills",
-  header = conditionalPanel(
-    "input.pills !== 'individual'",
-    tagList(
-      div(
-        class = "pt-4 d-flex justify-content-center",
-        tags$span("Overview of ", class = "lead px-2"),
-        selectInput("sex", NULL, c("persons", "men", "women", "men vs women" = "m/w"), selectize = FALSE, width = "auto"),
-        tags$span("dying of ", class = "lead px-2"),
-        selectInput("cause", NULL, c("any" = "All", "natural" = "Natural", "external" = "External"), selectize = FALSE, width = "auto"),
-        tags$span("cause", class = "lead px-2"),
-        tagAppendAttributes(
-          switchInput("show_ci", "Show 95% CI", FALSE),
-          style = "margin-left: 1.5rem"
+      class = "py-3 down-arrow d-flex flex-row text-center text-primary",
+      style = "justify-content: center",
+      a(
+        href = href,
+        p(class = "lead", msg),
+        #p(style = "font-size: 5rem", "﹀")
+        tags$i(
+          style = "font-size: 2rem",
+          class = "fa fa-chevron-down lead"
         )
       )
     )
-  ),
-  nav_spacer(),
-  nav(
-    "IDC chapters", value = "idc",
-    overviewUI(
-      "idc",
-      "Mortality measures for all IDC Chapters",
-      "Mortality rate ratios within subchapters",
-      "Life years lost within subchapters"
-    )
-  ),
-  nav(
-    "General conditions", value = "gmc",
-    overviewUI(
-      "gmc",
-      "Mortality measures for all general medical conditions",
-      "Mortality rate ratios within general medical conditions",
-      "Life years lost within general medical conditions"
-    )
-  ),
-  nav(
-    "Individual", value = "individual",
+  }
+
+  INTRO <- withTags(
     div(
-      style = "display:flex;justify-content:center;margin-top:1rem",
-      selectInput(
-        "disorder_id", NULL,
-        c("Search for a disorder" = "", setNames(disorders$id, disorders$description))
-      )
-    ),
-    conditionalPanel(
-      "input.disorder_id !== ''",
-      offcanvas("interpret", .title = "Interpretation"),
-      accordion(
-        accordion_item(
-          "Summary statement",
-          uiOutput("summary_headline")
-        ),
-        accordion_item(
-          "Summaries split by sex",
-          DT::dataTableOutput("summary_table")
-        ),
-        accordion_item(
-          "Incidence rate given age", show = FALSE,
-          plotlyOutput("incidence_age", height = 300)
-        ),
-        # TODO: add a control for sex?
-        accordion_item(
-          "Mortality rate ratio given age", show = FALSE,
-          tagList(
-            plotlyOutput("mrr_age", height = 300),
-            uiOutput("mrr_age_sex")
-          )
-        ),
-        # TODO: add a control for sex?
-        accordion_item(
-          "Mortality rate ratio given time since diagnosis", show = FALSE,
-          plotlyOutput("mrr_time", height = 300, width = "67%")
-        ),
-        accordion_item(
-          "Expected life remaining given age", show = FALSE,
-          plotlyOutput("lyl_age", height = 300, width = "80%")
-        ),
-        accordion_item(
-          "Survival curves", show = FALSE,
-          tagList(
-            plotlyOutput("survival"),
-            uiOutput("survival_controls")
-          )
-        )
-      )
-    )
-  ),
-  nav_spacer()
-)
-
-
-logo_img <- function(src, href = NULL, ...) {
-  div(
-    class = "col-lg-2 my-3 text-center",
-    a(href = href, img(class = "img-fluid", src = src, ...))
-  )
-}
-
-
-LOGO <- div(
-  id = "logo",
-  class = "container",
-  h1("Brought to you by:", class = "my-5 text-center"),
-  div(
-    class = "row justify-content-center align-items-center my-5",
-    logo_img(
-      "images/NBPlogo.jpg",
-      "http://econ.au.dk/the-national-centre-for-register-based-research/niels-bohr-professorship/",
-      width = "250px"
-    ),
-    div(class = "w-100 my-3"),
-    logo_img("images/aarhus_university_logo.png", "http://www.au.dk/en/"),
-    logo_img("images/DNRF.png", "https://dg.dk/en/"),
-    logo_img("images/UQlogo.png", "https://www.uq.edu.au"),
-    logo_img("images/statensSerumInstitut.png", "https://en.ssi.dk/"),
-    logo_img("images/harvard.png", "https://www.harvard.edu"),
-    div(class = "w-100 my-3"),
-    logo_img("images/EU_flag_yellow_high.jpg"),
-    logo_img("images/WMH Namestyle.jpg", "https://www.westmoreton.health.qld.gov.au/")
-  )
-)
-
-ABOUT <- div(
-  id = "about",
-  class = "bg-light text-center",
-  style = "height: 600px; padding-top: 100px",
-  div(
-    class = "container",
-    h1("Learn more"),
-    p(
-      class = "lead my-5",
-      style = "width: 100%; max-width: 800px; margin-left:auto; margin-right:auto",
-      "This website aims to provide more information on our scientific publication in ",
-      "TO BE DETERMINED",
-      #"The study was ", a(
-      #  "pre-registered at ClinicalTrials.gov. ",
-      #  href = "https://clinicaltrials.gov/ct2/show/NCT03847753"
-      #),
-      "See the links below for information about this study (i.e., paper and data), ",
-      "our contact information, and more about our work on Comorbidity in Mental disorder epidemiology at ",
-      a(href = "https://www.nbepi.com", "nbepi.com"),
-      "To cite the paper use TO BE DETERMINED"
-    ),
-    div(
-      class="row justify-content-center",
-      # TODO: paper link
-      a(class = "btn btn-primary btn-xl text-uppercase", href = "#", "Paper"),
-      a(class = "btn btn-primary btn-xl text-uppercase", "data-bs-toggle"="modal", href="#dataDownload", "Data"),
-      a(class="btn btn-primary btn-xl text-uppercase", href="mailto:j.mcgrath@uq.edu.au", "Mail"),
-      a(class="btn btn-primary btn-xl text-uppercase", href="https://www.nbepi.com", "NB Epi.com")
-    )
-  )
-)
-
-shiny::addResourcePath("data", "data-raw")
-
-ABOUT_MODAL <- modal(
-  id = "dataDownload", title = "Data download",
-  body = "Many datasets are used in this webpage, all available for download using the buttons below. ",
-  buttons = list(
-    "data/list_dx.txt" = "Condition info and stats",
-    "data/MRR.txt" = "Mortality rate ratios (MRR)",
-    "data/MRRage.txt" = "MRR given age",
-    "data/MRRlagged.txt" = "MRR given time since diagnosis",
-    "data/LYL.csv" = "Life years lost (LYL)",
-    "data/LYLages.csv" = "LYL given age",
-    "data/incidence.csv" = "Incidence rate given age"
-  )
-)
-
-FOOTER <- withTags(footer(
-  class = "bg-light",
-  style = "width:100vw; height:100px; position:absolute; left:0;",
-  div(
-    class = "container my-5",
-    div(
-      class = "row",
+      id = "intro",
+      class = "container",
+      style = "height: 100vh; position:relative",
+      h2(
+        class = "mt-4 text-center",
+        style = "width: 100%; max-width: 900px; margin-left:auto; margin-right:auto",
+        "Atlas of Disease Mortality"
+      ),
+      hr(style = "width: 100%; max-width: 600px", class = "mx-auto"),
       div(
-        class = "col-auto",
-        span(
-          class = "copyright",
-          HTML("Copyright &copy; The Como project 2021")
+        align = "center", class = "mt-4",
+        img(
+          style = "width: 100%; max-width: 600px",
+          src = "images/people.png"
         )
       ),
+      p(
+        class = "my-3 text-center text-secondary",
+        style = "width: 100%; max-width: 600px; margin-left:auto; margin-right:auto",
+        "A study by Oleguer Plana-Ripoll et. al."
+      ),
+      p(
+        class = "lead my-3 text-center",
+        style = "width: 100%; max-width: 700px; margin-left:auto; margin-right:auto",
+        "Abstract coming soon"
+      ),
       div(
-        class="col-auto ml-auto ms-auto",
-        ul(
-          class="list-inline quicklinks",
-          li(
-            class="list-inline-item",
-            a(href="#", "Privacy Policy")
+        align = "center", class = "mt-5",
+        img(class = "img-fluid", src = "images/NBPlogo.jpg", width="250px")
+      ),
+      down_arrow("Explore", "#pills")
+    )
+  )
+
+  clickToInform <- helpText(
+    "Click on a point for more information",
+    class = "lead", style = "align-self:flex-end"
+  )
+
+  PILLS <- navs_pill(
+    id = "pills",
+    header = conditionalPanel(
+      "input.pills !== 'individual'",
+      tagList(
+        div(
+          class = "pt-4 d-flex justify-content-center",
+          tags$span("Overview of ", class = "lead px-2"),
+          selectInput("sex", NULL, c("persons", "men", "women", "men vs women" = "m/w"), selectize = FALSE, width = "auto"),
+          tags$span("dying of ", class = "lead px-2"),
+          selectInput("cause", NULL, c("any" = "All", "natural" = "Natural", "external" = "External"), selectize = FALSE, width = "auto"),
+          tags$span("cause", class = "lead px-2"),
+          tagAppendAttributes(
+            switchInput("show_ci", "Show 95% CI", FALSE),
+            style = "margin-left: 1.5rem"
+          )
+        )
+      )
+    ),
+    nav_spacer(),
+    nav(
+      "IDC chapters", value = "idc",
+      overviewUI(
+        "idc",
+        "Mortality measures for all IDC Chapters",
+        "Mortality rate ratios within subchapters",
+        "Life years lost within subchapters"
+      )
+    ),
+    nav(
+      "General conditions", value = "gmc",
+      overviewUI(
+        "gmc",
+        "Mortality measures for all general medical conditions",
+        "Mortality rate ratios within general medical conditions",
+        "Life years lost within general medical conditions"
+      )
+    ),
+    nav(
+      "Individual", value = "individual",
+      div(
+        style = "display:flex;justify-content:center;margin-top:1rem;gap:2rem",
+        selectInput(
+          "disorder_id", NULL,
+          c("Search for a disorder" = "", setNames(disorders$id, disorders$description))
+        ),
+        uiOutput("bookmark_btn")
+      ),
+      conditionalPanel(
+        "input.disorder_id !== ''",
+        offcanvas("interpret", .title = "Interpretation"),
+        accordion(
+          accordion_item(
+            "Summary statement",
+            uiOutput("summary_headline")
           ),
-          li(
-            class="list-inline-item",
-            a(href="#", "Terms of Use")
+          accordion_item(
+            "Summaries split by sex",
+            DT::dataTableOutput("summary_table")
+          ),
+          accordion_item(
+            "Incidence rate given age", show = FALSE,
+            tagList(
+              plotlyOutput("incidence_age", height = 300),
+              clickToInform
+            )
+          ),
+          # TODO: add a control for sex?
+          accordion_item(
+            "Mortality rate ratio given age", show = FALSE,
+            tagList(
+              plotlyOutput("mrr_age", height = 300),
+              clickToInform,
+              uiOutput("mrr_age_sex")
+            )
+          ),
+          # TODO: add a control for sex?
+          accordion_item(
+            "Mortality rate ratio given time since diagnosis", show = FALSE,
+            tagList(
+              tagAppendAttributes(
+                plotlyOutput("mrr_time", height = 300, width = "67%")[[1]],
+                style = "align-self:center;"
+              ),
+              clickToInform
+            )
+          ),
+          accordion_item(
+            "Expected life remaining given age", show = FALSE,
+            tagAppendAttributes(
+              plotlyOutput("lyl_age", height = 300, width = "80%")[[1]],
+              style = "align-self:center;"
+            )
+          ),
+          accordion_item(
+            "Survival curves", show = FALSE,
+            tagList(
+              plotlyOutput("survival"),
+              uiOutput("survival_controls")
+            )
+          )
+        )
+      )
+    ),
+    nav_spacer()
+  )
+
+
+  logo_img <- function(src, href = NULL, ...) {
+    div(
+      class = "col-lg-2 my-3 text-center",
+      a(href = href, img(class = "img-fluid", src = src, ...))
+    )
+  }
+
+
+  LOGO <- div(
+    id = "logo",
+    class = "container",
+    h1("Brought to you by:", class = "my-5 text-center"),
+    div(
+      class = "row justify-content-center align-items-center my-5",
+      logo_img(
+        "images/NBPlogo.jpg",
+        "http://econ.au.dk/the-national-centre-for-register-based-research/niels-bohr-professorship/",
+        width = "250px"
+      ),
+      div(class = "w-100 my-3"),
+      logo_img("images/aarhus_university_logo.png", "http://www.au.dk/en/"),
+      logo_img("images/DNRF.png", "https://dg.dk/en/"),
+      logo_img("images/UQlogo.png", "https://www.uq.edu.au"),
+      logo_img("images/statensSerumInstitut.png", "https://en.ssi.dk/"),
+      logo_img("images/harvard.png", "https://www.harvard.edu"),
+      div(class = "w-100 my-3"),
+      logo_img("images/EU_flag_yellow_high.jpg"),
+      logo_img("images/WMH Namestyle.jpg", "https://www.westmoreton.health.qld.gov.au/")
+    )
+  )
+
+  ABOUT <- div(
+    id = "about",
+    class = "bg-light text-center",
+    style = "height: 600px; padding-top: 100px",
+    div(
+      class = "container",
+      h1("Learn more"),
+      p(
+        class = "lead my-5",
+        style = "width: 100%; max-width: 800px; margin-left:auto; margin-right:auto",
+        "This website aims to provide more information on our scientific publication in ",
+        "TO BE DETERMINED",
+        #"The study was ", a(
+        #  "pre-registered at ClinicalTrials.gov. ",
+        #  href = "https://clinicaltrials.gov/ct2/show/NCT03847753"
+        #),
+        "See the links below for information about this study (i.e., paper and data), ",
+        "our contact information, and more about our work on Comorbidity in Mental disorder epidemiology at ",
+        a(href = "https://www.nbepi.com", "nbepi.com"),
+        "To cite the paper use TO BE DETERMINED"
+      ),
+      div(
+        class="row justify-content-center",
+        # TODO: paper link
+        a(class = "btn btn-primary btn-xl text-uppercase", href = "#", "Paper"),
+        a(class = "btn btn-primary btn-xl text-uppercase", "data-bs-toggle"="modal", href="#dataDownload", "Data"),
+        a(class="btn btn-primary btn-xl text-uppercase", href="mailto:j.mcgrath@uq.edu.au", "Mail"),
+        a(class="btn btn-primary btn-xl text-uppercase", href="https://www.nbepi.com", "NB Epi.com")
+      )
+    )
+  )
+
+  shiny::addResourcePath("data", "data-raw")
+
+  ABOUT_MODAL <- modal(
+    id = "dataDownload", title = "Data download",
+    body = "Many datasets are used in this webpage, all available for download using the buttons below. ",
+    buttons = list(
+      "data/list_dx.txt" = "Condition info and stats",
+      "data/MRR.txt" = "Mortality rate ratios (MRR)",
+      "data/MRRage.txt" = "MRR given age",
+      "data/MRRlagged.txt" = "MRR given time since diagnosis",
+      "data/LYL.csv" = "Life years lost (LYL)",
+      "data/LYLages.csv" = "LYL given age",
+      "data/incidence.csv" = "Incidence rate given age"
+    )
+  )
+
+  FOOTER <- withTags(footer(
+    class = "bg-light",
+    style = "width:100vw; height:100px; position:absolute; left:0;",
+    div(
+      class = "container my-5",
+      div(
+        class = "row",
+        div(
+          class = "col-auto",
+          span(
+            class = "copyright",
+            HTML("Copyright &copy; The Como project 2021")
+          )
+        ),
+        div(
+          class="col-auto ml-auto ms-auto",
+          ul(
+            class="list-inline quicklinks",
+            li(
+              class="list-inline-item",
+              a(href="#", "Privacy Policy")
+            ),
+            li(
+              class="list-inline-item",
+              a(href="#", "Terms of Use")
+            )
           )
         )
       )
     )
-  )
-))
+  ))
 
-ui <- fluidPage(
-  theme = THEME,
-  HEAD,
-  INTRO,
-  PILLS,
-  ABOUT,
-  LOGO,
-  ABOUT_MODAL,
-  FOOTER
-)
+  fluidPage(
+    theme = THEME,
+    HEAD,
+    INTRO,
+    PILLS,
+    ABOUT,
+    LOGO,
+    ABOUT_MODAL,
+    FOOTER
+  )
+
+}
 
 # ----------------------------------------------------
 # Server logic
@@ -370,6 +391,46 @@ server <- function(input, output, session) {
       thematic::thematic_on(font = "Roboto Slab", qualitative = cols20)
     } else {
       thematic::thematic_on(font = "Roboto Slab")
+    }
+  })
+
+  # ------------------------------------
+  # Bookmarking logic
+  # ------------------------------------
+
+  plotly_events <- eval(formals(plotly::event_data)$event)
+
+  setBookmarkExclude(c(
+    ".clientValue-default-plotlyCrosstalkOpts",
+    paste0(plotly_events, "-A"),
+    paste0(plotly_events, "-display_disorder"),
+    paste0("summary_table_", c("rows_selected", "state", "search", "cell_clicked", "columns_selected", "cells_selected", "rows_current", "rows_all"))
+  ))
+
+  # Update URL everytime any input changes
+  observe({
+    reactiveValuesToList(input)
+    session$doBookmark()
+  })
+  onBookmarked(function(url) {
+    updateQueryString(url)
+  })
+
+  # For some reason input$disorder_id doesn't restore properly
+  onRestored(function(state) {
+    id <- state$input$disorder_id
+    if (length(id)) {
+      updateSelectizeInput(session, "disorder_id", selected = id)
+    }
+    session$sendCustomMessage("scroll-to", list(selector = "#pills"))
+  })
+
+  output$bookmark_btn <- renderUI({
+    if (nzchar(input$disorder_id %||% "")) {
+      bookmarkButton(
+        "Bookmark", class = "btn-primary btn-sm",
+        style = "height:50px"
+      )
     }
   })
 
@@ -505,6 +566,8 @@ server <- function(input, output, session) {
   })
 
   output$summary_headline <- renderUI({
+    req(nrow(DX_()) > 0)
+
     summary_headline(
       filter(DX_()),
       filter(DX_MRR(), cause %in% input$cause),
@@ -513,8 +576,9 @@ server <- function(input, output, session) {
     )
   })
 
-
   output$summary_table <- DT::renderDataTable({
+    req(nrow(DX_MRR()) > 0)
+
     dx_mrr <- filter(DX_MRR(), cause %in% "All")
     dx_lyl <- filter(DX_LYL(), cause %in% "All") %>%
       select(id, sex, ci)
@@ -750,7 +814,10 @@ server <- function(input, output, session) {
       width = "fit-content"
     )
 
-    tagList(age, cause)
+    div(
+      style = "display:flex; justify-content:space-around; margin-top:1rem",
+      age, cause
+    )
   })
 
 
@@ -823,4 +890,4 @@ server <- function(input, output, session) {
 
 }
 
-shinyApp(ui, server)
+shinyApp(ui, server, enableBookmarking = "url")

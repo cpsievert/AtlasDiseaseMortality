@@ -13,6 +13,8 @@ ggplotly2 <- function(p, ..., tooltip = "text") {
     )
 }
 
+
+
 subplot2 <- function(..., nrows = 1, margin = 0.01, shareX = FALSE,
                      shareY = FALSE, titleX = shareX, titleY = shareY) {
   plots <- lapply(rlang::list2(...), function(x) {
@@ -54,16 +56,17 @@ overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
       y = factor(y, rev(lvls(y))),
       x = n / 1000,
       text = paste0(
-        format_numbers(x, 0), " thousand\n", desc
+        format_numbers(x, 0), " thousand\n", wrap(desc)
       )
   )
 
   mrr <- mutate(mrr, y = factor(y, rev(lvls(y))))
   lyl <- mutate(lyl, y = factor(y, rev(lvls(y))))
 
-  counts <- highlight_key(counts, ~y, "overview_plot")
-  mrr <- highlight_key(mrr, ~y, "overview_plot")
-  lyl <- highlight_key(lyl, ~y, "overview_plot")
+  # TODO: highlighting not working for gmc view?
+  #counts <- highlight_key(counts, ~y, "overview_plot")
+  #mrr <- highlight_key(mrr, ~y, "overview_plot")
+  #lyl <- highlight_key(lyl, ~y, "overview_plot")
 
   p_counts <- ggplot(counts, aes(y = y, x = x, text = text, customdata = id)) +
     scale_x_continuous(labels = scales::comma) +
@@ -113,10 +116,11 @@ overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
       layout(yaxis = list(showticklabels = FALSE)),
     titleX = TRUE
   ) %>%
-    highlight(
-      "plotly_hover", debounce = 0.01,
-      selected = attrs_selected(showlegend = FALSE)
-    ) %>%
+    # TODO: not working for GMC view???
+    #highlight(
+    #  "plotly_hover", debounce = 0.01,
+    #  selected = attrs_selected(showlegend = FALSE)
+    #) %>%
     layout(
       showlegend = length(sex) == 2,
       annotations = list(

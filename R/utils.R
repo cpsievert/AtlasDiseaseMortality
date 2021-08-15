@@ -32,3 +32,5 @@ read_table <- function(file, ...) {
     data.table::fread(file = file, sep = " ", header = TRUE, ...)
   )
 }
+
+wrap <- scales::wrap_format(60)

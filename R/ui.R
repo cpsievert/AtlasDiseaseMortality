@@ -2,7 +2,7 @@ accordion <- function(...) {
   div(class = "accordion container", ...)
 }
 
-accordion_item <- function(header, body, show = TRUE, id = header) {
+accordion_item <- function(header, body, show = TRUE, id = header, direction = c("column", "row")) {
   id <- gsub("\\s+|\\(|\\)", "-", id)
   btn <- tags$button(
     class = "accordion-button",
@@ -24,7 +24,7 @@ accordion_item <- function(header, body, show = TRUE, id = header) {
       class = if (show) "show",
       div(
         class = "accordion-body",
-        style = "display: flex;justify-content: center;",
+        style = paste0("display:flex;flex-direction:", match.arg(direction)),
         body
       )
     )
