@@ -208,6 +208,12 @@ ui <- function(request) {
             DT::dataTableOutput("summary_table")
           ),
           accordion_item(
+            "Distribution of age at diagnosis", show = FALSE,
+            tagList(
+              plotlyOutput("diagnosis_age", height = 300)
+            )
+          ),
+          accordion_item(
             "Incidence rate given age", show = FALSE,
             tagList(
               plotlyOutput("incidence_age", height = 300),
@@ -619,6 +625,39 @@ server <- function(input, output, session) {
       )
   })
 
+  output$diagnosis_age <- renderPlotly({
+    req(input$disorder_id)
+
+    d <- DX_() %>%
+      left_join(ages, by = c("id", "sex"))
+
+    g <- ggplot(d, aes(x = age, y = density_dx)) +
+      xlab("Age in years") +
+      ylab("Distribution of age of diagnosis (density)") +
+      scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
+      facet_grid(
+        ~factor(sex, levels = c("persons", "men", "women")),
+        drop = FALSE
+      )
+
+    if (TRUE) { #TODO: input$smooth?
+      g <- g + geom_smooth(color = "black", se = FALSE) +
+        scale_y_continuous(limit = c(0, NA))
+    } else {
+      g <- g + geom_line(color = "black")
+    }
+
+    withr::with_options(
+      list(digits = 1),
+      ggplotly2(g) %>%
+        style(hovertemplate = "%{y}<extra></extra>") %>%
+        layout(
+          hovermode = "x",
+          xaxis = list(hoverformat = ".1f")
+        )
+    )
+  })
+
   output$incidence_age <- renderPlotly({
     req(input$disorder_id)
 
@@ -645,7 +684,10 @@ server <- function(input, output, session) {
       xlab("Age in years") +
       ylab("Incidence rate (per 10,000 person-years)") +
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
-      facet_grid(~sex, drop = FALSE)
+      facet_grid(
+        ~factor(sex, levels = c("persons", "men", "women")),
+        drop = FALSE
+      )
 
     ggplotly2(g) %>%
       show_customdata_offcanvas()
@@ -723,7 +765,10 @@ server <- function(input, output, session) {
       geom_point(aes(text = text, customdata = customdata)) +
       geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.1) +
       geom_line(linetype = "dashed") +
-      facet_wrap(~sex, ncol = 3, drop = FALSE) +
+      facet_wrap(
+        ~factor(sex, levels = c("persons", "men", "women")),
+        ncol = 3, drop = TRUE
+      ) +
       scale_x_continuous(breaks = 1:6, labels = c("0-6 months", "6-12 months", "1-2 years", "2-5 years", "5-10 years", "10+ years")) +
       scale_y_log10() +
       labs(x = NULL, y = NULL)
@@ -860,7 +905,10 @@ server <- function(input, output, session) {
     min_age <- min(survival_pct$time)
 
     g <- ggplot() +
-      facet_wrap(~sex, drop = FALSE) +
+      facet_wrap(
+        ~factor(sex, levels = c("persons", "men", "women")),
+        drop = FALSE
+      ) +
       xlab("Age in years") +
       ylab("Percentage of persons dead") +
       scale_x_continuous(breaks = c(min_age, seq(0, 100, 10)))
