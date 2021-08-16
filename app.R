@@ -208,10 +208,8 @@ ui <- function(request) {
             DT::dataTableOutput("summary_table")
           ),
           accordion_item(
-            "Distribution of age at diagnosis", show = FALSE,
-            tagList(
-              plotlyOutput("diagnosis_age", height = 300)
-            )
+            "Age at diagnosis", show = FALSE,
+            plotlyOutput("diagnosis_age", height = 300)
           ),
           accordion_item(
             "Incidence rate given age", show = FALSE,
@@ -629,28 +627,31 @@ server <- function(input, output, session) {
     req(input$disorder_id)
 
     d <- DX_() %>%
-      left_join(ages, by = c("id", "sex"))
+      left_join(ages, by = c("id", "sex")) %>%
+      arrange(sex, age) %>%
+      group_by(sex) %>%
+      mutate(
+        cdf = 100 * cumsum(density_dx)#,
+        # TODO: fix plotly bug of adding customdata to group aesthetic!
+        #customdata = glue::glue(
+        #  "By age {age}, {format_numbers(cdf, 1)} of all {sex} with {desc_EN} were diagnosed."
+        #)
+      )
 
-    g <- ggplot(d, aes(x = age, y = density_dx)) +
+    g <- ggplot(d, aes(x = age, y = cdf)) +
+      geom_line(color = "black") +
       xlab("Age in years") +
-      ylab("Distribution of age of diagnosis (density)") +
+      ylab("Percentage diagnosed") +
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
       facet_grid(
         ~factor(sex, levels = c("persons", "men", "women")),
         drop = FALSE
       )
 
-    if (TRUE) { #TODO: input$smooth?
-      g <- g + geom_smooth(color = "black", se = FALSE) +
-        scale_y_continuous(limit = c(0, NA))
-    } else {
-      g <- g + geom_line(color = "black")
-    }
-
     withr::with_options(
       list(digits = 1),
       ggplotly2(g) %>%
-        style(hovertemplate = "%{y}<extra></extra>") %>%
+        style(hovertemplate = "By age %{x:.1f}, %{y:.1f}% of the <br>diagnosed received their diagnosis<extra></extra>") %>%
         layout(
           hovermode = "x",
           xaxis = list(hoverformat = ".1f")
