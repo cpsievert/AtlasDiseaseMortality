@@ -50,7 +50,12 @@ read_table("data-raw/MRR.txt") %>%
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
   left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
   left_join(gmc_map, by = "desc") %>%
-  mutate(text = paste0(ci, "\n", wrap(desc))) %>%
+  mutate(
+    text = paste0(
+      start, ": ", scales::wrap_format(40)(desc),
+      "\nMRR = ", ci
+   )
+  ) %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/MRR.rds")
 
@@ -69,7 +74,7 @@ read_table("data-raw/MRRlagged.txt") %>%
       TRUE ~ paste(format_numbers(est, 1), "times higher")
     ),
     x = recode(exposure, !!!exposure_map),
-    text = paste0(ci, "<br>", x),
+    text = paste0(x, "<br>", ci),
     customdata = wrap(glue::glue("{x} after an initial diagnosis, the diagnosed had an average mortality rate of <b>{est_display}</b> compared to those of same age and sex without that diagnosis (MRR = {ci})"))
   ) %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
@@ -96,7 +101,12 @@ bind_rows(
   mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
   left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
   left_join(gmc_map, by = "desc") %>%
-  mutate(text = paste0(ci, "\n", wrap(desc))) %>%
+  mutate(
+    text = paste0(
+      start, ": ", scales::wrap_format(40)(desc),
+      "\nLYL = ", ci
+    )
+  ) %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/LYL.rds")
 

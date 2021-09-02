@@ -7,6 +7,12 @@ library(scales)
 library(rlang)
 library(htmlwidgets)
 
+
+# TODO: before deploying change this to
+# shinyOptions(cache = cachem::cache_disk(file.path(dirname(tempdir()), "myapp-cache"))
+bindCache <- function(x, ...) x
+
+
 # https://sashamaps.net/docs/resources/20-colors/
 cols20 <- c(
   '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4',
@@ -26,10 +32,19 @@ shiny::onStop(thematic::thematic_off)
 DX <- readRDS("data/DX.rds")
 
 disorders <- DX %>%
-  select(id, description, level)
+  select(id, description, level, chapter) %>%
+  distinct()
 
-chapters <- disorders %>%
+chapters_broad <- disorders %>%
   filter(level == 1)
+
+chapters_specific <- disorders %>%
+  filter(level != 1, !chapter %in% c(998, 999)) %>%
+  left_join(
+    select(
+      chapters_broad, chapter, desc_broad = description),
+    by = "chapter"
+  )
 
 gmc_broad <- disorders %>%
   filter(id %in% (100000 + c(1, 9, 13, 16, 21, 24, 27, 30, 31, 39)))
@@ -76,7 +91,6 @@ ui <- function(request) {
       lapply(dir("scss", full.names = TRUE), sass::sass_file)
     )
 
-
   HEAD <- withTags(head(
     # TODO: remove noindex after publication
     meta(name = "robots", content = "noindex"),
@@ -84,11 +98,9 @@ ui <- function(request) {
       href = "https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css",
       rel = "stylesheet"
     ),
-    script(src = "js/down-arrow.js"),
+    #script(src = "js/down-arrow.js"),
     script(src = "js/scroll-to.js")
   ))
-
-
 
   down_arrow <- function(msg, href) {
     div(
@@ -110,11 +122,11 @@ ui <- function(request) {
     div(
       id = "intro",
       class = "container",
-      style = "height: 100vh; position:relative",
+      #style = "height: 100vh; position:relative",
       h2(
         class = "mt-4 text-center",
         style = "width: 100%; max-width: 900px; margin-left:auto; margin-right:auto",
-        "Atlas of Disease Mortality"
+        "An analysis of mortality metrics associated with a comprehensive range of disorders: the Danish atlas of disease mortality"
       ),
       hr(style = "width: 100%; max-width: 600px", class = "mx-auto"),
       div(
@@ -124,21 +136,22 @@ ui <- function(request) {
           src = "images/people.png"
         )
       ),
-      p(
-        class = "my-3 text-center text-secondary",
-        style = "width: 100%; max-width: 600px; margin-left:auto; margin-right:auto",
-        "A study by Oleguer Plana-Ripoll et. al."
-      ),
-      p(
-        class = "lead my-3 text-center",
-        style = "width: 100%; max-width: 700px; margin-left:auto; margin-right:auto",
-        "Abstract coming soon"
-      ),
-      div(
-        align = "center", class = "mt-5",
-        img(class = "img-fluid", src = "images/NBPlogo.jpg", width="250px")
-      ),
-      down_arrow("Explore", "#pills")
+      hr(style = "width: 100%; max-width: 600px", class = "mx-auto my-3"),
+      #p(
+      #  class = "my-3 text-center text-secondary",
+      #  style = "width: 100%; max-width: 600px; margin-left:auto; margin-right:auto",
+      #  "A study by Oleguer Plana-Ripoll et. al."
+      #),
+      #p(
+      #  class = "lead my-3 text-center",
+      #  style = "width: 100%; max-width: 700px; margin-left:auto; margin-right:auto",
+      #  "Abstract coming soon"
+      #),
+      #div(
+      #  align = "center", class = "mt-5",
+      #  img(class = "img-fluid", src = "images/NBPlogo.jpg", width="250px")
+      #),
+      #down_arrow("Explore", "#pills")
     )
   )
 
@@ -161,28 +174,27 @@ ui <- function(request) {
           tags$span("cause", class = "lead px-2"),
           tagAppendAttributes(
             switchInput("show_ci", "Show 95% CI", FALSE),
-            style = "margin-left: 1.5rem"
+            style = "margin-left: 1.50rem"
           )
         )
       )
     ),
     nav_spacer(),
     nav(
-      "IDC chapters", value = "idc",
-      overviewUI(
-        "idc",
-        "Mortality measures for all IDC Chapters",
-        "Mortality rate ratios within subchapters",
-        "Life years lost within subchapters"
-      )
-    ),
-    nav(
-      "General conditions", value = "gmc",
-      overviewUI(
-        "gmc",
-        "Mortality measures for all general medical conditions",
-        "Mortality rate ratios within general medical conditions",
-        "Life years lost within general medical conditions"
+      "ICD chapters", value = "icd",
+      accordion(
+        accordion_item(
+          "Mortality measures for all ICD Chapters",
+          plotlyOutput("overview_icd")
+        ),
+        accordion_item(
+          "Mortality rate ratios within subchapters",
+          plotlyOutput("mrr_icd")
+        ),
+        accordion_item(
+          "Life years lost within subchapters",
+          plotlyOutput("lyl_icd")
+        )
       )
     ),
     nav(
@@ -192,8 +204,7 @@ ui <- function(request) {
         selectInput(
           "disorder_id", NULL,
           c("Search for a disorder" = "", setNames(disorders$id, disorders$description))
-        ),
-        uiOutput("bookmark_btn")
+        )
       ),
       conditionalPanel(
         "input.disorder_id !== ''",
@@ -208,7 +219,7 @@ ui <- function(request) {
             DT::dataTableOutput("summary_table")
           ),
           accordion_item(
-            "Age at diagnosis", show = FALSE,
+            "Age of diagnosis", show = FALSE,
             plotlyOutput("diagnosis_age", height = 300)
           ),
           accordion_item(
@@ -252,6 +263,23 @@ ui <- function(request) {
               uiOutput("survival_controls")
             )
           )
+        )
+      )
+    ),
+    nav(
+      "Selected disorders", value = "gmc",
+      accordion(
+        accordion_item(
+          "Mortality measures for all general medical conditions",
+          plotlyOutput("overview_gmc")
+        ),
+        accordion_item(
+          "Mortality rate ratios within general medical conditions",
+          plotlyOutput("mrr_gmc")
+        ),
+        accordion_item(
+          "Life years lost within general medical conditions",
+          plotlyOutput("lyl_gmc")
         )
       )
     ),
@@ -429,15 +457,6 @@ server <- function(input, output, session) {
     session$sendCustomMessage("scroll-to", list(selector = "#pills"))
   })
 
-  output$bookmark_btn <- renderUI({
-    if (nzchar(input$disorder_id %||% "")) {
-      bookmarkButton(
-        "Bookmark", class = "btn-primary btn-sm",
-        style = "height:50px"
-      )
-    }
-  })
-
   # ----------------------------------------------------
   # Reactive building blocks
   # ----------------------------------------------------
@@ -445,13 +464,13 @@ server <- function(input, output, session) {
   is_gmc_view <- reactive(identical(input$pills, "gmc"))
 
   ids_broad <- reactive({
-    if (is_gmc_view()) gmc_broad$id else chapters$id
+    if (is_gmc_view()) gmc_broad$id else chapters_broad$id
   })
   ids_specific <- reactive({
     if (is_gmc_view()) {
       return(gmc_specific$id)
     }
-    filter(DX, level != 1, !chapter %in% c(998, 999))$id
+    chapters_specific$id
   })
 
   sex <- reactive({
@@ -474,7 +493,8 @@ server <- function(input, output, session) {
   MRR_specific <- reactive({
     MRR_() %>%
       filter(id %in% ids_specific()) %>%
-      add_aes(broad = FALSE)
+      add_aes(broad = FALSE) %>%
+      left_join(select(chapters_specific, id, desc_broad), by = "id")
   })
 
   LYL_ <- reactive({
@@ -490,9 +510,9 @@ server <- function(input, output, session) {
   LYL_specific <- reactive({
     LYL_() %>%
       filter(id %in% ids_specific()) %>%
-      add_aes(broad = FALSE)
+      add_aes(broad = FALSE) %>%
+      left_join(select(chapters_specific, id, desc_broad), by = "id")
   })
-
 
   add_aes <- function(d, broad = TRUE) {
     d <- if (broad) {
@@ -504,7 +524,7 @@ server <- function(input, output, session) {
       mutate(
         d, group = if (is_gmc_view()) gmc else as.character(as.roman(chapter)),
         group = factor(group, if (is_gmc_view()) names(gmc_map) else unique(group))
-        )
+      )
     }
 
     if (length(sex()) == 2) {
@@ -523,17 +543,101 @@ server <- function(input, output, session) {
   })
 
   # ----------------------------------------------------
-  # IDC and GMC overview tabs (implemented as modules in R/overview.R)
+  # ICD and GMC overview tabs (implemented as modules in R/overview.R)
   # ----------------------------------------------------
 
-  overviewServer(
-    "gmc", counts, MRR_broad, LYL_broad, MRR_specific, LYL_specific,
-    sex, cause, show_ci, jitter = FALSE
-  )
-  overviewServer(
-    "idc", counts, MRR_broad, LYL_broad, MRR_specific, LYL_specific,
-    sex, cause, show_ci, jitter = TRUE
-  )
+  output$overview_icd <- renderPlotly({
+    overview_plot(
+      counts(), MRR_broad(), LYL_broad(),
+      sex(), show_ci(), cause()
+    )
+  }) %>%
+    bindCache("overview_icd", sex(), show_ci(), cause())
+
+  output$overview_gmc <- renderPlotly({
+    overview_plot(
+      counts(), MRR_broad(), LYL_broad(),
+      sex(), show_ci(), cause()
+    )
+  }) %>%
+    bindCache("overview_gmc", sex(), show_ci(), cause())
+
+  output$mrr_icd <- renderPlotly({
+    d <- MRR_specific()
+    cis_by_category(
+      d,
+      ytitle = paste0(
+        "Mortality Rate Ratios for ", cause(), " causes"
+      ),
+      ymin = min(d$est, na.rm = TRUE),
+      show_ci = show_ci(),
+      jitter = TRUE
+    ) %>%
+      add_annotations(
+        text = "Hover/click for\nmore info",
+        x = 0.8, y = 0.8,
+        xref = "paper", yref = "paper",
+        ax = -50, ay = -40,
+        font = list(size = 11)
+      ) %>%
+      layout(
+        yaxis = list(
+          type = "log", tickformat = ".1r", nticks = 5,
+          range = extendrange(log10(d$est))
+        )
+      )
+  }) %>%
+    bindCache("mrr_icd", sex(), cause(), show_ci())
+
+  output$mrr_gmc <- renderPlotly({
+    d <- MRR_specific()
+    cis_by_category(
+      d,
+      ytitle = paste0(
+        "Mortality Rate Ratios for ", cause(), " causes"
+      ),
+      show_ci = show_ci(),
+      jitter = FALSE
+    ) %>%
+      layout(
+        yaxis = list(
+          type = "log", tickformat = ".1r", nticks = 5,
+          range = extendrange(log10(d$est))
+        )
+      )
+  }) %>%
+    bindCache("mrr_gmc", sex(), cause(), show_ci())
+
+  output$lyl_icd <- renderPlotly({
+    d <- LYL_specific()
+    cis_by_category(
+      d,
+      ytitle = paste0(
+        "Life Years Lost due to ", cause(), " causes"
+      ),
+      ymin = min(d$est, na.rm = TRUE),
+      show_ci = show_ci(),
+      jitter = TRUE
+    ) %>%
+      layout(
+        yaxis = list(
+          range = extendrange(d$est)
+        )
+      )
+  }) %>%
+    bindCache("lyl_icd", sex(), cause(), show_ci())
+
+  output$lyl_gmc <- renderPlotly({
+    cis_by_category(
+      LYL_specific(),
+      ytitle = paste0(
+        "Life Years Lost due to ", cause(), " causes"
+      ),
+      show_ci = show_ci(),
+      jitter = FALSE
+    )
+  }) %>%
+    bindCache("lyl_gmc", sex(), cause(), show_ci())
 
   # Clicking on any of the overview plots takes you to details # for an individual disorder
   observe({
@@ -542,7 +646,6 @@ server <- function(input, output, session) {
     updateSelectizeInput(session, "disorder_id", selected = disorder_id)
     nav_select("pills", "individual")
   })
-
 
   # ----------------------------------------------------
   # Logic for 'individual' tab  (a particular disorder)
@@ -645,17 +748,13 @@ server <- function(input, output, session) {
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
       facet_grid(
         ~factor(sex, levels = c("persons", "men", "women")),
-        drop = FALSE
+        drop = TRUE
       )
 
     withr::with_options(
       list(digits = 1),
       ggplotly2(g) %>%
-        style(hovertemplate = "By age %{x:.1f}, %{y:.1f}% of the <br>diagnosed received their diagnosis<extra></extra>") %>%
-        layout(
-          hovermode = "x",
-          xaxis = list(hoverformat = ".1f")
-        )
+        style(hovertemplate = "By age %{x:.1f}, %{y:.1f}% of the <br>diagnosed received their diagnosis<extra></extra>")
     )
   })
 
@@ -687,7 +786,7 @@ server <- function(input, output, session) {
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
       facet_grid(
         ~factor(sex, levels = c("persons", "men", "women")),
-        drop = FALSE
+        drop = TRUE
       )
 
     ggplotly2(g) %>%
@@ -908,7 +1007,7 @@ server <- function(input, output, session) {
     g <- ggplot() +
       facet_wrap(
         ~factor(sex, levels = c("persons", "men", "women")),
-        drop = FALSE
+        drop = TRUE
       ) +
       xlab("Age in years") +
       ylab("Percentage of persons dead") +

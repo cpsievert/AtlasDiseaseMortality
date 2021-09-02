@@ -13,8 +13,6 @@ ggplotly2 <- function(p, ..., tooltip = "text") {
     )
 }
 
-
-
 subplot2 <- function(..., nrows = 1, margin = 0.01, shareX = FALSE,
                      shareY = FALSE, titleX = shareX, titleY = shareY) {
   plots <- lapply(rlang::list2(...), function(x) {
@@ -49,6 +47,7 @@ getDims <- function() {
 
 lvls <- function(x) if (is.factor(x)) levels(x) else unique(x)
 
+
 overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
 
   counts <- counts %>%
@@ -56,7 +55,8 @@ overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
       y = factor(y, rev(lvls(y))),
       x = n / 1000,
       text = paste0(
-        format_numbers(x, 0), " thousand\n", wrap(desc)
+        scales::wrap_format(40)(desc), "\n",
+        format_numbers(n, 0)
       )
   )
 
@@ -103,8 +103,8 @@ overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
   }
 
   ggcounts <- ggplotly2(p_counts)
-  ggcounts$x$data[[1]]$name <- "men"
-  ggcounts$x$data[[2]]$name <- "women"
+  ggcounts$x$data[[1]]$name <- "women"
+  ggcounts$x$data[[2]]$name <- "men"
 
   gg <- subplot2(
     ggcounts,
@@ -124,7 +124,7 @@ overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
     layout(
       showlegend = length(sex) == 2,
       annotations = list(
-        text = "Click for\nmore details",
+        text = "Hover/click for\nmore details",
         x = 0.25, y = 0.2,
         xref = "paper", yref = "paper",
         ax = 0, ay = -50,
@@ -140,7 +140,8 @@ overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
 }
 
 
-cis_by_category <- function(data, ytitle, show_ci = FALSE, jitter = TRUE) {
+cis_by_category <- function(data, ytitle, ymin = NULL, show_ci = FALSE, jitter = TRUE) {
+
   panel <- function(d) {
     error_y <- if (show_ci) {
       list(
@@ -152,27 +153,39 @@ cis_by_category <- function(data, ytitle, show_ci = FALSE, jitter = TRUE) {
         marker = ~list(color = color)
       )
     }
+
     p <- plot_ly(d, showlegend = FALSE, source = "display_disorder") %>%
-      # TODO: overlay chapter level summary
-      #add_segments(
-      #  x = ~min(-pos), xend = ~max(-pos),
-      #  y = ~unique(LYL_chap), yend = ~unique(LYL_chap)
-      #) %>%
       config(displayModeBar = FALSE) %>%
       layout(
         yaxis = list(
           zeroline = FALSE,
+          autorange = FALSE,
           title = ytitle
         ),
         xaxis = list(
           title = "",
+          # ticks are only relevant when ymin is missing
+          # (in that case we're faking the x-axis)
+          showticklabels = length(ymin) == 0,
           ticktext = ~unique(as.character(group)),
           tickvals = 1,
           tickangle = 45,
+          fixedrange = TRUE,
           zeroline = FALSE,
           showgrid = FALSE
         )
       )
+
+    if (length(ymin)) {
+      p <- add_text(p,
+        text = ~unique(as.character(group)),
+        customdata = ~sub("^.*:\\s*", "", unique(desc_broad)),
+        hovertemplate = "%{customdata}<extra></extra>",
+        x = 1, y = ymin,
+        textposition = "bottom center",
+        cliponaxis = FALSE
+      )
+    }
 
     for (col in unique(d$color)) {
       p <- add_markers(
@@ -210,7 +223,8 @@ cis_by_category <- function(data, ytitle, show_ci = FALSE, jitter = TRUE) {
       titleX = TRUE
     ) %>%
     layout(
-      shapes = hline(y = 1, dash = "dash", color = toRGB("red"))
+      shapes = hline(y = 1, dash = "dash", color = toRGB("red")),
+      font = list(family = "Roboto Slab")
     )
 }
 
