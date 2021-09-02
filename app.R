@@ -38,6 +38,18 @@ disorders <- DX %>%
 chapters_broad <- disorders %>%
   filter(level == 1)
 
+chapter_broad_lvls <- DX %>%
+  filter(level == 1) %>%
+  pull(chapter_label) %>%
+  unique() %>%
+  as.character()
+
+
+chapter_broad_lvls <- setNames(
+  chapter_broad_lvls,
+  sapply(strsplit(chapter_broad_lvls, " "), "[[", 1)
+)
+
 chapters_specific <- disorders %>%
   filter(level != 1, !chapter %in% c(998, 999)) %>%
   left_join(
@@ -66,6 +78,7 @@ lifeExp <- readRDS("data/lifeExp.rds")
 lifeExp0 <- readRDS("data/lifeExp0.rds")
 
 ages <- readRDS("data/ages.rds")
+
 incidence <- readRDS("data/incidence.rds")
 
 # General population death rates
@@ -219,8 +232,12 @@ ui <- function(request) {
             DT::dataTableOutput("summary_table")
           ),
           accordion_item(
-            "Age of diagnosis", show = FALSE,
+            "Age at diagnosis", show = FALSE,
             plotlyOutput("diagnosis_age", height = 300)
+          ),
+          accordion_item(
+            "Age at death", show = FALSE,
+            plotlyOutput("death_age", height = 300)
           ),
           accordion_item(
             "Incidence rate given age", show = FALSE,
@@ -229,9 +246,9 @@ ui <- function(request) {
               clickToInform
             )
           ),
-          # TODO: add a control for sex?
           accordion_item(
-            "Mortality rate ratio given age", show = FALSE,
+            "Mortality rates and mortality rate ratio given age",
+            show = FALSE,
             tagList(
               plotlyOutput("mrr_age", height = 300),
               clickToInform,
@@ -250,7 +267,8 @@ ui <- function(request) {
             )
           ),
           accordion_item(
-            "Expected life remaining given age", show = FALSE,
+            "Expected remaining life expectancy at a given age",
+            show = FALSE,
             tagAppendAttributes(
               plotlyOutput("lyl_age", height = 300, width = "80%")[[1]],
               style = "align-self:center;"
@@ -481,7 +499,9 @@ server <- function(input, output, session) {
   show_ci <- reactive(isTRUE(input$show_ci))
 
   MRR_ <- reactive({
-    filter(MRR, sex %in% sex(), cause %in% input$cause) %>%
+    MRR %>%
+      repeat_sex_rows() %>%
+      filter(sex %in% sex(), cause %in% input$cause) %>%
       distinct()
   })
 
@@ -498,7 +518,9 @@ server <- function(input, output, session) {
   })
 
   LYL_ <- reactive({
-    filter(LYL, sex %in% sex(), cause %in% input$cause) %>%
+    LYL %>%
+      repeat_sex_rows() %>%
+      filter(sex %in% sex(), cause %in% input$cause) %>%
       distinct()
   })
 
@@ -518,12 +540,12 @@ server <- function(input, output, session) {
     d <- if (broad) {
       mutate(
         d, y = if (is_gmc_view()) desc else chapter_label,
-        y = factor(y, if (is_gmc_view()) names(gmc_map) else unique(y))
+        y = factor(y, if (is_gmc_view()) names(gmc_map) else chapter_broad_lvls)
       )
     } else {
       mutate(
         d, group = if (is_gmc_view()) gmc else as.character(as.roman(chapter)),
-        group = factor(group, if (is_gmc_view()) names(gmc_map) else unique(group))
+        group = factor(group, if (is_gmc_view()) names(gmc_map) else names(chapter_broad_lvls))
       )
     }
 
@@ -537,7 +559,9 @@ server <- function(input, output, session) {
   }
 
   counts <- reactive({
-    filter(DX, id %in% ids_broad(), sex %in% sex(), !is.na(n)) %>%
+    d <- filter(DX, id %in% ids_broad(), !is.na(n))
+    d <- repeat_sex_rows(d)
+    filter(d, sex %in% sex()) %>%
       rename(desc = desc_EN) %>%
       add_aes(broad = TRUE)
   })
@@ -675,11 +699,16 @@ server <- function(input, output, session) {
   output$summary_headline <- renderUI({
     req(nrow(DX_()) > 0)
 
+    dx <- filter(DX_(), include == 1)
+    sexes <- unique(dx$sex)
+    default <- if ("persons" %in% sexes) "persons" else sexes[1]
+    selected <- input$sex_headline %||% default
+
     summary_headline(
-      filter(DX_()),
-      filter(DX_MRR(), cause %in% input$cause),
-      filter(DX_LYL(), cause %in% input$cause),
-      input
+      filter(dx, sex %in% selected),
+      filter(DX_MRR(), sex %in% selected, cause %in% input$cause),
+      filter(DX_LYL(), sex %in% selected, cause %in% input$cause),
+      dropdown('sex_headline', !!!sexes, selected = selected)
     )
   })
 
@@ -729,19 +758,12 @@ server <- function(input, output, session) {
   output$diagnosis_age <- renderPlotly({
     req(input$disorder_id)
 
-    d <- DX_() %>%
-      left_join(ages, by = c("id", "sex")) %>%
-      arrange(sex, age) %>%
-      group_by(sex) %>%
-      mutate(
-        cdf = 100 * cumsum(density_dx)#,
-        # TODO: fix plotly bug of adding customdata to group aesthetic!
-        #customdata = glue::glue(
-        #  "By age {age}, {format_numbers(cdf, 1)} of all {sex} with {desc_EN} were diagnosed."
-        #)
-      )
+    d <- filter(ages, id == input$disorder_id)
+    validate(
+      need(nrow(d) > 0, message = "Estimates coming soon")
+    )
 
-    g <- ggplot(d, aes(x = age, y = cdf)) +
+    g <- ggplot(d, aes(x = dx, y = pct)) +
       geom_line(color = "black") +
       xlab("Age in years") +
       ylab("Percentage diagnosed") +
@@ -754,7 +776,32 @@ server <- function(input, output, session) {
     withr::with_options(
       list(digits = 1),
       ggplotly2(g) %>%
-        style(hovertemplate = "By age %{x:.1f}, %{y:.1f}% of the <br>diagnosed received their diagnosis<extra></extra>")
+        style(hovertemplate = "%{y:.1f}% of the diagnosed have received\nthe diagnosis before age %{x:.0f}<extra></extra>")
+    )
+  })
+
+  output$death_age <- renderPlotly({
+    req(input$disorder_id)
+
+    d <- filter(ages, id == input$disorder_id)
+    validate(
+      need(nrow(d) > 0, message = "Estimates coming soon")
+    )
+
+    g <- ggplot(d, aes(x = death, y = pct)) +
+      geom_line(color = "black") +
+      xlab("Age in years") +
+      ylab("Percentage deceased") +
+      scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
+      facet_grid(
+        ~factor(sex, levels = c("persons", "men", "women")),
+        drop = TRUE
+      )
+
+    withr::with_options(
+      list(digits = 1),
+      ggplotly2(g) %>%
+        style(hovertemplate = "%{y:.1f}% of the diagnosed\npassed away by age %{x:.0f}<extra></extra>")
     )
   })
 
@@ -769,11 +816,11 @@ server <- function(input, output, session) {
         dx_rate_left = 10000 * dx_rate_left,
         dx_rate_right = 10000 * dx_rate_right,
         text = paste0(
-          format_ci(dx_rate, dx_rate_left, dx_rate_right, n = 1), "\n",
-          "Age: ", format_numbers(age_group + 2.5, 0)
+          "Age: ", age_group, "-", age_group + 5, "\n",
+          format_ci(dx_rate, dx_rate_left, dx_rate_right, n = 2)
         ),
         customdata = wrap(glue::glue(
-          "If 10,000 {sex} of age {age_group}-{age_group+5} years are followed for one year, on average <b>{format_numbers(dx_rate, 1)}</b> of them will be diagnosed with the disorder for the first time (IR = {format_numbers(dx_rate, 1)} (95% CI: {format_numbers(dx_rate_left, 2)}-{format_numbers(dx_rate_right, 1)}))"
+          "If 10,000 {sex} of age {age_group}-{age_group+5} years are followed for one year, on average <b>{format_numbers(dx_rate, 2)}</b> of them will be diagnosed with the disorder for the first time (IR = {format_numbers(dx_rate, 2)} (95% CI: {format_numbers(dx_rate_left, 2)}-{format_numbers(dx_rate_right, 2)}))"
         ))
       )
 
@@ -793,10 +840,15 @@ server <- function(input, output, session) {
       show_customdata_offcanvas()
   })
 
+
+  DX_incidence <- reactive({
+    filter(incidence, id == input$disorder_id)
+  })
+
   output$mrr_age_sex <- renderUI({
-    sexes <- unique(MRRage_()$sex)
-    drop <- selectInput("mrr_age_sex", NULL, sexes, selectize = FALSE, width = "auto")
-    if (identical(sexes, "persons")) {
+    sexes <- unique(DX_incidence()$sex)
+    drop <- selectInput("mrr_age_sex", NULL, sexes, selectize = FALSE, width = "fit-content")
+    if (length(sexes) < 2) {
       drop <- tagAppendAttributes(drop, style = "display:none;")
     }
     drop
@@ -809,10 +861,8 @@ server <- function(input, output, session) {
   output$mrr_age <- renderPlotly({
     req(input$disorder_id, input$mrr_age_sex)
 
-    incidence1 <- filter(incidence, id == input$disorder_id)
-
-    rates <- rbind(incidence0, incidence1) %>%
-      filter(sex %in% sex()) %>%
+    rates <- rbind(incidence0, DX_incidence()) %>%
+      filter(sex %in% input$mrr_age_sex) %>%
       mutate(
         id = ifelse(id == 0, 0, 1),
         death_rate_left = ifelse(id == 0, NA, death_rate_left),
@@ -824,28 +874,37 @@ server <- function(input, output, session) {
         death_rate_left = 10000 * death_rate_left,
         death_rate_right = 10000 * death_rate_right,
         color = ifelse(id == 1, "Diagnosed with the disorder", "Entire Danish population"),
-        text = format_ci(death_rate, death_rate_left, death_rate_right, n = 1),
+        text = paste0(
+          "Age: ", age_group, "-", age_group + 5, "\n",
+          format_ci(death_rate, death_rate_left, death_rate_right, n = 1)
+        ),
         customdata = glue::glue(
           "If 10,000 {sex} of age {age_group}-{age_group+5} years are followed for one year{ifelse(id == 1, ' after diagnosis', '')}, on average <b>{format_numbers(death_rate, 1)}</b> of them will die (IR = {format_numbers(death_rate, 1)} (95% CI: {format_numbers(death_rate_left, 1)}-{format_numbers(death_rate_right, 1)}))"
         )
       )
 
-    ratios <- filter(MRRage_(), sex %in% input$mrr_age_sex) %>%
-      mutate(
-        text = format_ci(est, lower, upper, n = 1),
-        est_display = case_when(
-          est < 1 ~ paste0(format_numbers(100 * (1 - est)), "% lower"),
-          est < 2 ~ paste0(format_numbers(100 * (est - 1)), "% higher"),
-          TRUE ~ paste(format_numbers(est, 1), "times higher")
-        ),
-        customdata = glue::glue(
-          "At age {age_group}-{age_group+5}, those with a diagnosis experience mortality rates {est_display} compared to those of same age and sex without that diagnosis (MRR = {format_numbers(est, 1)} (95% CI: {format_numbers(lower, 1)}-{format_numbers(upper, 1)}))"
-        )
-      )
+    ratios <- filter(MRRage_(), sex %in% input$mrr_age_sex)
 
+    if (nrow(ratios) > 0) {
+      ratios <- ratios %>%
+        mutate(
+          text = paste0(
+            "Age: ", age_group, "-", age_group + 5, "\n",
+            format_ci(est, lower, upper, n = 1)
+          ),
+          est_display = case_when(
+            est < 1 ~ paste0(format_numbers(100 * (1 - est)), "% lower"),
+            est < 2 ~ paste0(format_numbers(100 * (est - 1)), "% higher"),
+            TRUE ~ paste(format_numbers(est, 1), "times higher")
+          ),
+          customdata = glue::glue(
+            "At age {age_group}-{age_group+5}, those with a diagnosis experience mortality rates {est_display} compared to those of same age and sex without that diagnosis (MRR = {format_numbers(est, 1)} (95% CI: {format_numbers(lower, 1)}-{format_numbers(upper, 1)}))"
+          )
+        )
+    }
 
     validate(
-      need(nrow(rates) > 0 && nrow(ratios) > 0, "No estimates available")
+      need(nrow(rates) > 0, "No estimates available")
     )
 
     mrr_by_age(rates, ratios) %>%
@@ -883,12 +942,16 @@ server <- function(input, output, session) {
 
   output$lyl_age <- renderPlotly({
 
-    d <- bind_rows(
-      mutate(lifeExp0, group = "Entire Danish population", ci = format_numbers(est, 1)),
-      lifeExp %>%
-        filter(id %in% input$disorder_id) %>%
-        mutate(group = "Diagnosed with the disorder")
-    )
+    d0 <- mutate(lifeExp0, group = "Entire Danish population", ci = format_numbers(est, 1))
+
+    d1 <- lifeExp %>%
+      filter(id %in% input$disorder_id) %>%
+      mutate(group = "Diagnosed with the disorder")
+
+    ages <- extendrange(d1$age)
+
+    d <- bind_rows(d0, d1) %>%
+      filter(between(age, ages[1], ages[2]))
 
     g <- ggplot(d, aes(x = age, y = est, color = group)) +
       geom_ribbon(aes(
@@ -896,7 +959,6 @@ server <- function(input, output, session) {
         ymax = ifelse(is.na(upper), est, upper),
         fill = group), alpha = 0.5) +
       geom_line(aes(customdata = ci)) +
-      scale_y_continuous(limits = c(0, NA)) +
       facet_grid(~sex) +
       xlab("Age in years") +
       ylab("Remaining life expectancy\nafter diagnosis (in years)")
@@ -905,13 +967,16 @@ server <- function(input, output, session) {
       style(hovertemplate = "%{customdata}<extra></extra>") %>%
       layout(
         hovermode = "x",
+        xaxis = list(hoverformat = ".1f"),
+        xaxis2 = list(hoverformat = ".1f"),
         legend = list(y = 1.15),
         margin = list(l = 80)
       )
 
     gg$x$data <- lapply(gg$x$data, function(tr){
       if (isTRUE(tr$fill == "toself")) {
-        tr$hovertemplate <- NULL
+        # unfortunately setting this to NULL breaks hovermode="x"?
+        tr$hovertemplate <- "<extra></extra>"
       } else {
         tr$showlegend <- FALSE
       }

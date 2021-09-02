@@ -1,13 +1,6 @@
-summary_headline <- function(dx, dx_mrr, dx_lyl, input) {
-  sex_ <- input$sex_headline %||% "persons"
+summary_headline <- function(dx, dx_mrr, dx_lyl, sex_dropdown) {
 
-  dx <- filter(dx, sex %in% sex_)
-  dx_mrr <- filter(dx_mrr, sex %in% sex_)
-  dx_lyl <- filter(dx_lyl, sex %in% sex_)
-
-  drop <- dropdown('sex_headline', 'persons', 'men', 'women', selected = sex_)
-
-  template <- "A total of {Diagnosed} {drop} living in Denmark in 2000-2018 were diagnosed for the first time with disorder '{desc_EN}' in a hospital in 1995-2018."
+  template <- "A total of {Diagnosed} {sex_dropdown} living in Denmark in 2000-2018 were diagnosed for the first time with disorder '{desc_EN}' in a hospital in 1995-2018."
 
   if (!is_na(dx$age_dx50)) {
     template <- paste0(
@@ -26,12 +19,14 @@ summary_headline <- function(dx, dx_mrr, dx_lyl, input) {
   mrr <- dx_mrr$est
 
   template_mrr <- if (isTRUE(mrr >= 2)) {
-    " On average, mortality rates were {format_numbers(est, 1)} times higher among the diagnosed compared to those of same age and sex without that diagnosis (MRR = ({format_numbers(lower, 1)}, {format_numbers(upper, 1)}))"
+    " On average, mortality rates were {format_numbers(est, 1)} times higher"
   } else if (isTRUE(mrr > 1)) {
-    " On average, mortality rates were {format_numbers(100 * (est - 1), 0)}% higher among the diagnosed compared to those of same age and sex without that diagnosis (MRR = ({format_numbers(lower, 1)}, {format_numbers(upper, 1)}))"
+    " On average, mortality rates were {format_numbers(100 * (est - 1), 0)}% higher"
   } else if (isTRUE(mrr < 1)) {
-    " On average, mortality rates were {format_numbers(100 * (est - 1), 0)}% lower among the diagnosed compared to those of same age and sex without that diagnosis (MRR = ({format_numbers(lower, 1)}, {format_numbers(upper, 1)}))"
+    " On average, mortality rates were {format_numbers(100 * (est - 1), 0)}% lower"
   }
+
+  template_mrr <- paste(template_mrr, "among the diagnosed compared to those of same age and sex without that diagnosis (MRR = {format_numbers(est, 1)} (95% CI: {format_numbers(lower, 1)}, {format_numbers(upper, 1)}))")
 
   lyl <- dx_lyl$est
 
@@ -39,15 +34,12 @@ summary_headline <- function(dx, dx_mrr, dx_lyl, input) {
     paste0(
       ", and the average reduction in life expectancy after diagnosis was {format_numbers(est, 1)} years compared to the entire Danish population of same age and sex",
       if (!is_na(dx_lyl$lower)) {
-        " (LYL = ({format_numbers(lower, 1)}, {format_numbers(upper, 1)}))."
+        " (LYL = {format_numbers(est, 1)} (95% CI: {format_numbers(lower, 1)}, {format_numbers(upper, 1)}))."
       },
       "<br/><br/><b>Note:</b> The estimate of life expectancy is based on the assumption that the diagnosed will experience the mortality rates
                                                    of the diagnosed during the entire life (after diagnosis), which might be plausible for chronic disorders but not for acute ones."
     )
   }
-
-
-
 
   txt <- paste0(
     glue::glue_data(dx, template),

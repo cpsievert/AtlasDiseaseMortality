@@ -1,3 +1,20 @@
+# Some disorders (e.g., chpater XV pregnancy) only have estimates for
+# a particular sex, but we still want them displayed when "persons" is
+# selected, so we just repeat the given row as if we truly do
+# have the estimate for "persons"
+repeat_sex_rows <- function(d) {
+  dats <- split(d, paste(d$id, d$cause, sep = "-"))
+  dplyr::bind_rows(lapply(dats, function(x) {
+    sexes <- unique(x$sex)
+    if ("persons" %in% sexes || length(sexes) > 1) {
+      return(x)
+    }
+    y <- x
+    y$sex <- "persons"
+    dplyr::bind_rows(x, y)
+  }))
+}
+
 format_ci <- function(est, lower, upper, n = 1, prefix = "") {
   case_when(
     is.na(est) ~ "-",

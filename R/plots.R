@@ -245,21 +245,31 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
     ylab("Mortality rates (per 10,000 person-years)") +
     scale_y_log10()
 
-  ratios <- ggplot() +
-    geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
-    geom_errorbar(
-      data = highlight_key(dat_ratios, ~age_group, "disorder_mrr"),
-      aes(
-        x = age_group + 2.5, y = est,
-        ymin = lower, ymax = upper,
-        text = text,
-        customdata = customdata
+  ratios <- if (nrow(dat_ratios) > 0) {
+    ggplot() +
+      geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
+      geom_errorbar(
+        data = highlight_key(dat_ratios, ~age_group, "disorder_mrr"),
+        aes(
+          x = age_group + 2.5, y = est,
+          ymin = lower, ymax = upper,
+          text = text,
+          customdata = customdata
+        )
+      ) +
+      xlab("Age in years") +
+      ylab("Mortality rate ratio") +
+      scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
+      scale_y_log10()
+  } else {
+    plotly_empty() %>%
+      add_annotations(
+        text = "Ratios not available",
+        x = 0.5, y = 0.5,
+        xref = "paper", yref = "paper",
+        showarrow = FALSE
       )
-    ) +
-    xlab("Age in years") +
-    ylab("Mortality rate ratio") +
-    scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
-    scale_y_log10()
+  }
 
   gg <- subplot2(
     ggplotly3(rates), ggplotly3(ratios),

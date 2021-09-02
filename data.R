@@ -44,19 +44,17 @@ saveRDS(gmc_map, "data/gmc_map.rds")
 gmc_map <- tidyr::unnest(tibble::enframe(gmc_map, "gmc", "desc"))
 
 
-
 read_table("data-raw/MRR.txt") %>%
   select(id, sex, cause = cod, est = HR, lower = CI_left, upper = CI_right) %>%
-  mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
-  left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
+  mutate(
+    ci = format_ci(est, lower, upper, n = 2),
+    sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))
+  ) %>%
+  left_join(select(DX, id, sex, desc = desc_EN, chapter, chapter_label), by = c("id", "sex")) %>%
   left_join(gmc_map, by = "desc") %>%
   mutate(
-    text = paste0(
-      start, ": ", scales::wrap_format(40)(desc),
-      "\nMRR = ", ci
-   )
+    text = paste0(scales::wrap_format(40)(desc), "\nMRR = ", ci)
   ) %>%
-  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/MRR.rds")
 
 wrap <- scales::wrap_format(60)
@@ -64,8 +62,11 @@ exposure_map <- setNames(c("0-6 months", "6-12 months", "1-2 years", "2-5 years"
 
 read_table("data-raw/MRRlagged.txt") %>%
   select(id, sex, cause = cod, exposure, est = HR, lower = CI_left, upper = CI_right) %>%
-  mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
-  left_join(select(DX, id, desc = desc_EN), by = "id") %>%
+  mutate(
+    ci = format_ci(est, lower, upper, n = 2),
+    sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))
+  ) %>%
+  left_join(select(DX, id, sex, desc = desc_EN), by = c("id", "sex")) %>%
   left_join(gmc_map, by = "desc") %>%
   mutate(
     est_display = case_when(
@@ -74,18 +75,19 @@ read_table("data-raw/MRRlagged.txt") %>%
       TRUE ~ paste(format_numbers(est, 1), "times higher")
     ),
     x = recode(exposure, !!!exposure_map),
-    text = paste0(x, "<br>", ci),
+    text = paste0(x, "<br>MRR = ", ci),
     customdata = wrap(glue::glue("{x} after an initial diagnosis, the diagnosed had an average mortality rate of <b>{est_display}</b> compared to those of same age and sex without that diagnosis (MRR = {ci})"))
   ) %>%
-  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/MRRlagged.rds")
 
 
 read_table("data-raw/MRRage.txt") %>%
   select(id, sex, cause = cod, age_group, est = HR, lower = CI_left, upper = CI_right) %>%
-  mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
-  left_join(select(DX, id, desc = desc_EN), by = "id") %>%
-  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
+  mutate(
+    ci = format_ci(est, lower, upper, n = 2),
+    sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))
+  ) %>%
+  left_join(select(DX, id, sex, desc = desc_EN), by = c("id", "sex")) %>%
   saveRDS("data/MRRage.rds")
 
 
@@ -98,16 +100,13 @@ bind_rows(
   select(LYL, id, sex, est = LYL_External, lower = LYL_External_L, upper = LYL_External_R) %>%
     mutate(cause = "External")
 ) %>%
-  mutate(ci = format_ci(est, lower, upper, n = 2)) %>%
-  left_join(select(DX, id, desc = desc_EN, chapter, chapter_label), by = "id") %>%
-  left_join(gmc_map, by = "desc") %>%
   mutate(
-    text = paste0(
-      start, ": ", scales::wrap_format(40)(desc),
-      "\nLYL = ", ci
-    )
+    ci = format_ci(est, lower, upper, n = 2),
+    sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))
   ) %>%
-  mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
+  left_join(select(DX, id, sex, desc = desc_EN, chapter, chapter_label), by = c("id", "sex")) %>%
+  left_join(gmc_map, by = "desc") %>%
+  mutate(text = paste0(scales::wrap_format(40)(desc), "\nLYL = ", ci)) %>%
   saveRDS("data/LYL.rds")
 
 
@@ -126,7 +125,7 @@ bind_rows(
   saveRDS("data/LYLage.rds")
 
 read_table("data-raw/LYLages.txt") %>%
-  mutate(ci = format_ci(life_exp, life_exp_L, life_exp_R, n = 2)) %>%
+  mutate(ci = format_ci(life_exp, life_exp_L, life_exp_R, n = 1)) %>%
   select(id, age, sex, ci, est = life_exp, lower = life_exp_L, upper = life_exp_R) %>%
   mutate(text = paste0(ci, "<br>", "Age: ", age)) %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
@@ -141,7 +140,7 @@ read_table("data-raw/LYLages.txt") %>%
   saveRDS("data/lifeExp0.rds")
 
 
-read_table("data-raw/ages.txt") %>%
+read_table("data-raw/cuminc.txt") %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/ages.rds")
 
