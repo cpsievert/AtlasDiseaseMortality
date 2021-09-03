@@ -640,6 +640,7 @@ server <- function(input, output, session) {
         "Life Years Lost due to ", cause(), " causes"
       ),
       ymin = min(d$est, na.rm = TRUE),
+      yint = 0,
       show_ci = show_ci(),
       jitter = TRUE
     ) %>%
@@ -657,6 +658,7 @@ server <- function(input, output, session) {
       ytitle = paste0(
         "Life Years Lost due to ", cause(), " causes"
       ),
+      yint = 0,
       show_ci = show_ci(),
       jitter = FALSE
     )
@@ -706,8 +708,8 @@ server <- function(input, output, session) {
 
     summary_headline(
       filter(dx, sex %in% selected),
-      filter(DX_MRR(), sex %in% selected, cause %in% input$cause),
-      filter(DX_LYL(), sex %in% selected, cause %in% input$cause),
+      filter(DX_MRR(), sex %in% selected, cause %in% "All"),
+      filter(DX_LYL(), sex %in% selected, cause %in% "All"),
       dropdown('sex_headline', !!!sexes, selected = selected)
     )
   })

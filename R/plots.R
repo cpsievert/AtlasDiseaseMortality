@@ -140,7 +140,7 @@ overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
 }
 
 
-cis_by_category <- function(data, ytitle, ymin = NULL, show_ci = FALSE, jitter = TRUE) {
+cis_by_category <- function(data, ytitle, ymin = NULL, yint = 1, show_ci = FALSE, jitter = TRUE) {
 
   panel <- function(d) {
     error_y <- if (show_ci) {
@@ -223,7 +223,7 @@ cis_by_category <- function(data, ytitle, ymin = NULL, show_ci = FALSE, jitter =
       titleX = TRUE
     ) %>%
     layout(
-      shapes = hline(y = 1, dash = "dash", color = toRGB("red")),
+      shapes = hline(y = yint, dash = "dash", color = toRGB("red")),
       font = list(family = "Roboto Slab")
     )
 }
