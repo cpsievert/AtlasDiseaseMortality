@@ -132,15 +132,13 @@ overview_plot <- function(counts, mrr, lyl, sex, show_ci, cause) {
       )
     )
 
-#  browser()
-
   gg$x$source <- "display_disorder"
 
   gg
 }
 
 
-cis_by_category <- function(data, ytitle, ymin = NULL, yint = 1, show_ci = FALSE, jitter = TRUE) {
+cis_by_category <- function(data, ytitle, xtitle = NULL, ymin = NULL, yint = 1, show_ci = FALSE, jitter = TRUE) {
 
   panel <- function(d) {
     error_y <- if (show_ci) {
@@ -214,7 +212,7 @@ cis_by_category <- function(data, ytitle, ymin = NULL, yint = 1, show_ci = FALSE
     data$x <- 1
   }
 
-  data %>%
+  p <- data %>%
     group_by(group) %>%
     do(p = panel(.)) %>%
     subplot(
@@ -226,6 +224,17 @@ cis_by_category <- function(data, ytitle, ymin = NULL, yint = 1, show_ci = FALSE
       shapes = hline(y = yint, dash = "dash", color = toRGB("red")),
       font = list(family = "Roboto Slab")
     )
+
+  if (!is.null(xtitle)) {
+    p <- add_annotations(
+      p, text = xtitle,
+      x = 0.5, xref = "paper", xanchor = "center",
+      y = 0, yref = "paper", yanchor = "top",
+      yshift = -10, showarrow = FALSE
+    )
+  }
+
+  p
 }
 
 mrr_by_age <- function(dat_rates, dat_ratios) {
@@ -264,7 +273,7 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
   } else {
     plotly_empty() %>%
       add_annotations(
-        text = "Ratios not available",
+        text = "Ratios available only for persons",
         x = 0.5, y = 0.5,
         xref = "paper", yref = "paper",
         showarrow = FALSE
@@ -279,7 +288,7 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
     layout(
       showlegend = TRUE,
       hovermode = "x",
-      legend = list(y = 1.15)
+      legend = list(y = 1.15, x = 0.05, xanchor = "left")
     )
 
   highlight(

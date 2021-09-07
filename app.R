@@ -64,6 +64,8 @@ gmc_broad <- disorders %>%
 gmc_specific <- disorders %>%
   filter(id %in% (100000 + c(2:8, 10:12, 14, 15, 17:20, 22, 23, 25, 26, 28:30, 32:39)))
 
+gmc_ids <- c(gmc_broad$id, gmc_specific$id)
+
 gmc_map <- readRDS("data/gmc_map.rds")
 
 MRR <- readRDS("data/MRR.rds")
@@ -194,29 +196,42 @@ ui <- function(request) {
     ),
     nav_spacer(),
     nav(
-      "ICD chapters", value = "icd",
+      "ICD-10 Chapters", value = "icd",
       accordion(
         accordion_item(
-          "Mortality measures for all ICD Chapters",
+          "Mortality measures for all ICD-10 Chapters",
           plotlyOutput("overview_icd")
         ),
         accordion_item(
-          "Mortality rate ratios within subchapters",
+          "Mortality rate ratios for disorders within ICD-10 Chapters",
           plotlyOutput("mrr_icd")
         ),
         accordion_item(
-          "Life years lost within subchapters",
+          "Life years lost for disorders within ICD-10 Chapters",
           plotlyOutput("lyl_icd")
         )
       )
     ),
     nav(
-      "Individual", value = "individual",
+      "All ICD-10 disorders", value = "individual",
       div(
-        style = "display:flex;justify-content:center;margin-top:1rem;gap:2rem",
-        selectInput(
+        style = "display:flex;flex-direction:column;align-items:center;margin-top:1rem;margin-bottom:1.5rem",
+        selectizeInput(
           "disorder_id", NULL,
-          c("Search for a disorder" = "", setNames(disorders$id, disorders$description))
+          c("Search for a disorder" = "", setNames(disorders$id, disorders$description)),
+          options = list(
+            score = I(sprintf("function(search) {
+              var score = this.getScoreFunction(search);
+              var gmc_ids = %s;
+						  return function(item) {
+							  return score(item) * (gmc_ids.indexOf(item.value) == -1);
+						  };
+            }", jsonlite::toJSON(as.character(gmc_ids))))
+          )
+        ),
+        conditionalPanel(
+          "input.disorder_id !== ''",
+          helpText("To search for another disorder, click the dropdown above, then press ", tags$kbd("Backspace"), "(", tags$kbd("Delete"), "on Mac), then enter the disorder.")
         )
       ),
       conditionalPanel(
@@ -288,15 +303,15 @@ ui <- function(request) {
       "Selected disorders", value = "gmc",
       accordion(
         accordion_item(
-          "Mortality measures for all general medical conditions",
+          "Mortality measures for broad categories of selected disorders",
           plotlyOutput("overview_gmc")
         ),
         accordion_item(
-          "Mortality rate ratios within general medical conditions",
+          "Mortality rate ratios for selected disorders within each broad category",
           plotlyOutput("mrr_gmc")
         ),
         accordion_item(
-          "Life years lost within general medical conditions",
+          "Life years lost for selected disorders within each broad category",
           plotlyOutput("lyl_gmc")
         )
       )
@@ -327,10 +342,11 @@ ui <- function(request) {
       div(class = "w-100 my-3"),
       logo_img("images/aarhus_university_logo.png", "http://www.au.dk/en/"),
       logo_img("images/DNRF.png", "https://dg.dk/en/"),
+      logo_img("images/LUF.png", "https://lundbeckfonden.com/", style = "height:125px;"),
       logo_img("images/UQlogo.png", "https://www.uq.edu.au"),
       logo_img("images/statensSerumInstitut.png", "https://en.ssi.dk/"),
-      logo_img("images/harvard.png", "https://www.harvard.edu"),
       div(class = "w-100 my-3"),
+      logo_img("images/harvard.png", "https://www.harvard.edu"),
       logo_img("images/EU_flag_yellow_high.jpg"),
       logo_img("images/WMH Namestyle.jpg", "https://www.westmoreton.health.qld.gov.au/")
     )
@@ -347,23 +363,24 @@ ui <- function(request) {
         class = "lead my-5",
         style = "width: 100%; max-width: 800px; margin-left:auto; margin-right:auto",
         "This website aims to provide more information on our scientific publication in ",
-        "TO BE DETERMINED",
+        "TO BE DETERMINED.",
         #"The study was ", a(
         #  "pre-registered at ClinicalTrials.gov. ",
         #  href = "https://clinicaltrials.gov/ct2/show/NCT03847753"
         #),
-        "See the links below for information about this study (i.e., paper and data), ",
-        "our contact information, and more about our work on Comorbidity in Mental disorder epidemiology at ",
-        a(href = "https://www.nbepi.com", "nbepi.com"),
-        "To cite the paper use TO BE DETERMINED"
+        "See the links below for information about this study (i.e., scientific publication, pre-registered protocol, code, and aggregated summary data), ",
+        "our contact information, and more about our work on psychiatric  epidemiology at ",
+        a(href = "https://www.nbepi.com", "nbepi.com", .noWS = "after"),
+        ". To cite the paper use TO BE DETERMINED."
       ),
       div(
         class="row justify-content-center",
         # TODO: paper link
         a(class = "btn btn-primary btn-xl text-uppercase", href = "#", "Paper"),
-        a(class = "btn btn-primary btn-xl text-uppercase", "data-bs-toggle"="modal", href="#dataDownload", "Data"),
-        a(class="btn btn-primary btn-xl text-uppercase", href="mailto:j.mcgrath@uq.edu.au", "Mail"),
-        a(class="btn btn-primary btn-xl text-uppercase", href="https://www.nbepi.com", "NB Epi.com")
+        a(class = "btn btn-primary btn-xl text-uppercase", href = "https://osf.io/zafhu", "Protocol"),
+        a(class = "btn btn-primary btn-xl text-uppercase", "data-bs-toggle"="modal", href="https://osf.io/zafhu", "Code and summary data"),
+        a(class="btn btn-primary btn-xl text-uppercase", href="mailto:j.mcgrath@uq.edu.au", "Contact"),
+        a(class="btn btn-primary btn-xl text-uppercase", href="https://www.nbepi.com", "Epi.com")
       )
     )
   )
@@ -395,7 +412,7 @@ ui <- function(request) {
           class = "col-auto",
           span(
             class = "copyright",
-            HTML("Copyright &copy; The Como project 2021")
+            HTML("Copyright &copy; Atlas of disease mortality 2021")
           )
         ),
         div(
@@ -593,6 +610,7 @@ server <- function(input, output, session) {
       ytitle = paste0(
         "Mortality Rate Ratios for ", cause(), " causes"
       ),
+      xtitle = "ICD-10 Chapters (hover for description)",
       ymin = min(d$est, na.rm = TRUE),
       show_ci = show_ci(),
       jitter = TRUE
@@ -639,6 +657,7 @@ server <- function(input, output, session) {
       ytitle = paste0(
         "Life Years Lost due to ", cause(), " causes"
       ),
+      xtitle = "ICD-10 Chapters (hover for description)",
       ymin = min(d$est, na.rm = TRUE),
       yint = 0,
       show_ci = show_ci(),
@@ -653,15 +672,21 @@ server <- function(input, output, session) {
     bindCache("lyl_icd", sex(), cause(), show_ci())
 
   output$lyl_gmc <- renderPlotly({
+    d <- LYL_specific()
     cis_by_category(
-      LYL_specific(),
+      d,
       ytitle = paste0(
         "Life Years Lost due to ", cause(), " causes"
       ),
       yint = 0,
       show_ci = show_ci(),
       jitter = FALSE
-    )
+    ) %>%
+      layout(
+        yaxis = list(
+          range = extendrange(d$est)
+        )
+      )
   }) %>%
     bindCache("lyl_gmc", sex(), cause(), show_ci())
 

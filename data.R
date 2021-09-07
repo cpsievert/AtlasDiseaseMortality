@@ -22,6 +22,7 @@ DX <- read_table("data-raw/list_dx.txt") %>%
       is.na(age_death50), "-", paste0(format_numbers(age_death50, 1), " (", format_numbers(age_death25, 1), "-", format_numbers(age_death75, 1), ")"))
   ) %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
+  left_join(read_table("data-raw/labels.txt")) %>%
   distinct()
 
 saveRDS(DX, "data/DX.rds")
@@ -147,3 +148,5 @@ read_table("data-raw/cuminc.txt") %>%
 read_table("data-raw/incidence.txt") %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/incidence.rds")
+
+read_table("data-raw/labels.txt")
