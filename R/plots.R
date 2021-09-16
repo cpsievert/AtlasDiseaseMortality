@@ -1,6 +1,6 @@
 ggplotly2 <- function(p, ..., tooltip = "text") {
   dims <- getDims()
-  ggplotly(p, ..., width = dims$width, height = dims$height, tooltip = tooltip) %>%
+  g <- ggplotly(p, ..., width = dims$width, height = dims$height, tooltip = tooltip) %>%
     config(displayModeBar = FALSE) %>%
     layout(
       xaxis = list(fixedrange = TRUE),
@@ -11,6 +11,13 @@ ggplotly2 <- function(p, ..., tooltip = "text") {
         x = 0.5, xanchor = "center"
       )
     )
+
+  g$x$layout$shapes <- lapply(g$x$layout$shapes, function(s) {
+    s$layer <- "below"
+    s
+  })
+
+  g
 }
 
 subplot2 <- function(..., nrows = 1, margin = 0.01, shareX = FALSE,
@@ -250,6 +257,11 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
       ),
       width = 0.1
     ) +
+    geom_text(
+      data = highlight_key(dat_rates, ~age_group, "disorder_mrr"),
+      aes(x = age_group + 2.5, y = death_rate, label = text),
+      alpha = 0
+    ) +
     xlab("Age in years") +
     ylab("Mortality rates (per 10,000 person-years)") +
     scale_y_log10()
@@ -266,6 +278,11 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
           customdata = customdata
         )
       ) +
+      geom_text(
+        data = highlight_key(dat_ratios, ~age_group, "disorder_mrr"),
+        aes(x = age_group + 2.5, y = upper, label = paste0(text, "\n")),
+        alpha = 0
+      ) +
       xlab("Age in years") +
       ylab("Mortality rate ratio") +
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
@@ -281,24 +298,18 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
   }
 
   gg <- subplot2(
-    ggplotly3(rates), ggplotly3(ratios),
+    ggplotly3(rates) %>%
+      style_textposition_multiple(top = "top left", bottom = "bottom right"),
+    ggplotly3(ratios) %>%
+      style_textposition_single(left = "top center", right = "top center"),
     titleX = TRUE, titleY = TRUE, margin = 0.04
   ) %>%
-    style(hoverinfo = "none") %>%
     layout(
       showlegend = TRUE,
-      hovermode = "x",
       legend = list(y = 1.15, x = 0.05, xanchor = "left")
     )
 
-  highlight(
-    gg, "plotly_hover", debounce = 0.01,
-    selected = attrs_selected(
-      #hovertemplate = "%{customdata}<extra></extra>",
-      hoverinfo = "text",
-      showlegend = FALSE
-    )
-  )
+  add_crosstalk_hover(gg)
 }
 
 
@@ -331,4 +342,55 @@ show_customdata_offcanvas <- function(p) {
       })
     }"
   )
+}
+
+add_crosstalk_hover <- function(p, left = 'top left', right = 'bottom right', opacityDim = 0.3, debounce = 0, ...) {
+  p <- style(p, hoverinfo = "none")
+
+  highlight(
+    p, "plotly_hover", opacityDim = opacityDim,
+    debounce = debounce,
+    selected = attrs_selected(
+      cliponaxis = FALSE, ...,
+      showlegend = FALSE,
+      textfont = list(color = "black", size = 10),
+      marker = list(color = "black")
+    )
+  )
+}
+
+
+style_textposition_single <- function(p, left = "top left", right = "bottom right") {
+  p$x$data <- lapply(p$x$data, function(tr) {
+    if (!isTRUE(tr$mode == "text") || is.null(tr$set)) {
+      return(tr)
+    }
+    xmid <- mean(range(tr$x, na.rm = TRUE), na.rm = TRUE)
+    tr$textposition <- ifelse(tr$x > xmid, left, right)
+    tr
+  })
+  p
+}
+
+
+style_textposition_multiple <- function(p, top = "top left", bottom = "bottom right", add_margin = TRUE) {
+  p$x$data <- lapply(p$x$data, function(tr) {
+    if (!isTRUE(tr$mode == "text") || is.null(tr$set)) {
+      return(tr)
+    }
+    x <- tr$x
+    y <- tr$y
+    txt <- tr$text
+    for (i in seq_along(x)) {
+      ys <- y[which(x == x[i])]
+      is_bottom <- isTRUE(y[i] == min(ys, na.rm = TRUE))
+      tr$textposition[i] <- if (is_bottom) bottom else top
+      if (add_margin) {
+        tr$text[i] <- if (is_bottom) paste0("\n", txt[i]) else paste0(txt[i], "\n")
+      }
+    }
+    tr
+  })
+
+  p
 }

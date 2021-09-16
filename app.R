@@ -285,7 +285,7 @@ ui <- function(request) {
             "Expected remaining life expectancy at a given age",
             show = FALSE,
             tagAppendAttributes(
-              plotlyOutput("lyl_age", height = 300, width = "80%")[[1]],
+              plotlyOutput("lyl_age")[[1]],
               style = "align-self:center;"
             )
           ),
@@ -355,7 +355,7 @@ ui <- function(request) {
   ABOUT <- div(
     id = "about",
     class = "bg-light text-center",
-    style = "height: 600px; padding-top: 100px",
+    style = "height: 700px; padding-top: 100px;",
     div(
       class = "container",
       h1("Learn more"),
@@ -787,11 +787,16 @@ server <- function(input, output, session) {
 
     d <- filter(ages, id == input$disorder_id)
     validate(
-      need(nrow(d) > 0, message = "Estimates coming soon")
+      need(nrow(d) > 0, message = "Estimates not available")
     )
 
     g <- ggplot(d, aes(x = dx, y = pct)) +
       geom_line(color = "black") +
+      geom_text(
+        data = highlight_key(d, ~pct, "diagnosis_age"),
+        aes(label = paste0("  ", pct, "% of the diagnosed have received  \n  the diagnosis before age ", format_numbers(dx, 1), "  ")),
+        alpha = 0
+      ) +
       xlab("Age in years") +
       ylab("Percentage diagnosed") +
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
@@ -800,11 +805,9 @@ server <- function(input, output, session) {
         drop = TRUE
       )
 
-    withr::with_options(
-      list(digits = 1),
-      ggplotly2(g) %>%
-        style(hovertemplate = "%{y:.1f}% of the diagnosed have received\nthe diagnosis before age %{x:.0f}<extra></extra>")
-    )
+    ggplotly2(g) %>%
+      add_crosstalk_hover(opacityDim = 1, mode = "text+markers") %>%
+      style_textposition_single()
   })
 
   output$death_age <- renderPlotly({
@@ -812,11 +815,16 @@ server <- function(input, output, session) {
 
     d <- filter(ages, id == input$disorder_id)
     validate(
-      need(nrow(d) > 0, message = "Estimates coming soon")
+      need(nrow(d) > 0, message = "Estimates not available")
     )
 
     g <- ggplot(d, aes(x = death, y = pct)) +
       geom_line(color = "black") +
+      geom_text(
+        data = highlight_key(d, ~pct, "death_age"),
+        aes(label = paste0(pct, "% of the diagnosed\npassed away by age ", format_numbers(death, 1))),
+        alpha = 0
+      ) +
       xlab("Age in years") +
       ylab("Percentage deceased") +
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
@@ -825,11 +833,12 @@ server <- function(input, output, session) {
         drop = TRUE
       )
 
-    withr::with_options(
-      list(digits = 1),
-      ggplotly2(g) %>%
-        style(hovertemplate = "%{y:.1f}% of the diagnosed\npassed away by age %{x:.0f}<extra></extra>")
-    )
+    ggplotly2(g) %>%
+      add_crosstalk_hover(
+        opacityDim = 1,
+        mode = "text+markers"
+      ) %>%
+      style_textposition_single(right = "top left")
   })
 
   output$incidence_age <- renderPlotly({
@@ -851,10 +860,14 @@ server <- function(input, output, session) {
         ))
       )
 
-    g <- ggplot(d, aes(x = age_group + 2.5, y = dx_rate, text = text)) +
+    g <- ggplot(
+      highlight_key(d, ~age_group, "incidence_age"),
+      aes(x = age_group + 2.5, y = dx_rate, text = text)
+    ) +
       geom_line(linetype = "dashed") +
       geom_point(aes(customdata = customdata)) +
       geom_errorbar(aes(ymin = dx_rate_left, ymax = dx_rate_right)) +
+      geom_text(aes(label = paste0(text, "\n"), y = dx_rate_right), alpha = 0) +
       xlab("Age in years") +
       ylab("Incidence rate (per 10,000 person-years)") +
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
@@ -864,7 +877,9 @@ server <- function(input, output, session) {
       )
 
     ggplotly2(g) %>%
-      show_customdata_offcanvas()
+      show_customdata_offcanvas() %>%
+      add_crosstalk_hover() %>%
+      style_textposition_single(right = "top right")
   })
 
 
@@ -902,11 +917,19 @@ server <- function(input, output, session) {
         death_rate_right = 10000 * death_rate_right,
         color = ifelse(id == 1, "Diagnosed with the disorder", "Entire Danish population"),
         text = paste0(
-          "Age: ", age_group, "-", age_group + 5, "\n",
+          ifelse(
+            id == 1,
+            paste0("Age: ", age_group, "-", age_group + 5, "\n"),
+            ""
+          ),
           format_ci(death_rate, death_rate_left, death_rate_right, n = 1)
         ),
         customdata = glue::glue(
-          "If 10,000 {sex} of age {age_group}-{age_group+5} years are followed for one year{ifelse(id == 1, ' after diagnosis', '')}, on average <b>{format_numbers(death_rate, 1)}</b> of them will die (IR = {format_numbers(death_rate, 1)} (95% CI: {format_numbers(death_rate_left, 1)}-{format_numbers(death_rate_right, 1)}))"
+          "If 10,000 {sex} of age {age_group}-{age_group+5} years  {ifelse(id == 1, 'diagnosed with the disorder', 'in the general population')} are followed for one year{ifelse(id == 1, ' after diagnosis', '')}, on average <b>{format_numbers(death_rate, 2)}</b> of them will die (IR = {format_numbers(death_rate, 2)}"
+        ),
+        customdata = paste0(
+          customdata,
+          ifelse(id == 1, glue::glue(" (95% CI: {format_numbers(death_rate_left, 2)}-{format_numbers(death_rate_right, 2)}))"), ")")
         )
       )
 
@@ -925,7 +948,7 @@ server <- function(input, output, session) {
             TRUE ~ paste(format_numbers(est, 1), "times higher")
           ),
           customdata = glue::glue(
-            "At age {age_group}-{age_group+5}, those with a diagnosis experience mortality rates {est_display} compared to those of same age and sex without that diagnosis (MRR = {format_numbers(est, 1)} (95% CI: {format_numbers(lower, 1)}-{format_numbers(upper, 1)}))"
+            "At age {age_group}-{age_group+5}, those with a diagnosis experience mortality rates {est_display} compared to those of same age and sex without that diagnosis (MRR = {format_numbers(est, 2)} (95% CI: {format_numbers(lower, 2)}-{format_numbers(upper, 2)}))"
           )
         )
     }
@@ -980,37 +1003,44 @@ server <- function(input, output, session) {
     d <- bind_rows(d0, d1) %>%
       filter(between(age, ages[1], ages[2]))
 
-    g <- ggplot(d, aes(x = age, y = est, color = group)) +
+    g <- ggplot(d, aes(x = age, y = est)) +
       geom_ribbon(aes(
         ymin = ifelse(is.na(lower), est, lower),
         ymax = ifelse(is.na(upper), est, upper),
-        fill = group), alpha = 0.5) +
-      geom_line(aes(customdata = ci)) +
+        fill = group, color = group), alpha = 0.5) +
+      geom_line(aes(customdata = ci, color = group)) +
+      geom_text(
+        data = highlight_key(d, ~age, "lyl_age"),
+        aes(label = text),
+        alpha = 0
+      ) +
       facet_grid(~sex) +
       xlab("Age in years") +
       ylab("Remaining life expectancy\nafter diagnosis (in years)")
 
-    gg <- ggplotly2(g) %>%
-      style(hovertemplate = "%{customdata}<extra></extra>") %>%
+    gg <- ggplotly2(g, source = "lyl_age") %>%
+      event_unregister("plotly_hover") %>%
       layout(
         hovermode = "x",
-        xaxis = list(hoverformat = ".1f"),
-        xaxis2 = list(hoverformat = ".1f"),
         legend = list(y = 1.15),
         margin = list(l = 80)
       )
 
     gg$x$data <- lapply(gg$x$data, function(tr){
-      if (isTRUE(tr$fill == "toself")) {
-        # unfortunately setting this to NULL breaks hovermode="x"?
-        tr$hovertemplate <- "<extra></extra>"
-      } else {
+      if (!isTRUE(tr$fill == "toself")) {
         tr$showlegend <- FALSE
       }
       tr
     })
 
-    gg
+    add_crosstalk_hover(
+      gg, opacityDim = 1, debounce = 0.00005,
+      mode = "text+markers"
+    ) %>%
+      style_textposition_multiple(
+        top = "top right",
+        bottom = "bottom center"
+      )
   })
 
 
@@ -1064,6 +1094,10 @@ server <- function(input, output, session) {
 
     all_causes <- (input$cause_survival %||% "All causes") %in% "All causes"
 
+    # downsample just so hovertext is more responsive
+    survival <- survival %>%
+      filter((time - as.integer(time)) == 0)
+
     if (all_causes) {
       survival <- survival %>%
         mutate(
@@ -1106,25 +1140,55 @@ server <- function(input, output, session) {
       scale_x_continuous(breaks = c(min_age, seq(0, 100, 10)))
 
     if (all_causes) {
+      d <- filter(survival_pct, cause == "Dead (all causes)")
       g <- g + geom_line(
-        data = filter(survival_pct, cause == "Dead (all causes)"),
+        data = d,
         aes(x = time, y = 100 * cip, color = group)
-      )
+      ) +
+        geom_text(
+          data = highlight_key(d, ~time, "survival"),
+          alpha = 0,
+          aes(
+            x = time, y = 100 * cip,
+            label = paste0(
+              format_numbers(100 * cip, 1), "%",
+              ifelse(
+                grepl("Diagnosed", group),
+                paste(" deceased<br>by age", time),
+                ""
+              )
+            )
+          )
+        )
     } else {
+      d <- survival_pct %>%
+        mutate(
+          cause = recode(cause, "Dead (external causes)" = " External", "Dead (natural causes)" = " Natural")
+        ) %>%
+        filter(cause %in% c(" External", " Natural"))
       g <- g + geom_line(
-        data = mutate(survival_pct, cause = recode(cause, "Dead (external causes)" = " External", "Dead (natural causes)" = " Natural")) %>%
-          filter(cause %in% c(" External", " Natural")),
+        data = d,
         aes(x = time, y = 100 * cip, color = group, linetype = cause)
-      )
+      ) +
+        geom_text(
+          data = highlight_key(d, ~time, "survival"),
+          alpha = 0,
+          aes(x = time, y = 100 * cip,
+              label = paste0(format_numbers(100 * cip, 1), "%"))
+          )
     }
 
-    ggplotly2(g, tooltip = c("y", "x")) %>%
-      style(hovertemplate = "%{y:.1f}%<extra></extra>") %>%
-      layout(
-        hovermode = "x",
-        xaxis = list(hoverformat = ".1f"),
-        xaxis2 = list(hoverformat = ".1f"),
-        legend = list(y = 1.1)
+    ggplotly2(g, source = "survival") %>%
+      layout(hovermode = "x", legend = list(y = 1.1)) %>%
+      event_unregister("plotly_hover") %>%
+      add_crosstalk_hover(
+        opacityDim = 1, debounce = 0.00005,
+        mode = "text+markers"
+      ) %>%
+      style_textposition_multiple(
+        top = "top left",
+        bottom = "bottom right",
+        add_margin = all_causes
       )
   })
 

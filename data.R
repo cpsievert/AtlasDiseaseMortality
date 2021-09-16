@@ -128,7 +128,7 @@ bind_rows(
 read_table("data-raw/LYLages.txt") %>%
   mutate(ci = format_ci(life_exp, life_exp_L, life_exp_R, n = 1)) %>%
   select(id, age, sex, ci, est = life_exp, lower = life_exp_L, upper = life_exp_R) %>%
-  mutate(text = paste0(ci, "<br>", "Age: ", age)) %>%
+  mutate(text = ci) %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/lifeExp.rds")
 
@@ -136,7 +136,9 @@ read_table("data-raw/LYLages.txt") %>%
 read_table("data-raw/LYLages.txt") %>%
   filter(id == 1) %>% # baseline
   select(age, est = life_exp0, sex) %>%
-  mutate(text = paste0(est, "<br>", "Age: ", age)) %>%
+  mutate(
+    text = paste0(format_numbers(est, 1), " years remaining<br>at age ", format_numbers(age, 0))
+  ) %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/lifeExp0.rds")
 
@@ -148,5 +150,3 @@ read_table("data-raw/cuminc.txt") %>%
 read_table("data-raw/incidence.txt") %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   saveRDS("data/incidence.rds")
-
-read_table("data-raw/labels.txt")
