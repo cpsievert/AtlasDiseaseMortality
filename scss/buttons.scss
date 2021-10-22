@@ -1,0 +1,62 @@
+.btn {
+  font-family: 'Montserrat', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-weight: 500;
+  box-shadow: none !important;
+}
+
+.btn-xl {
+  font-size: 1.2rem;
+  padding: 1rem 2rem;
+  margin: 1rem;
+  width: fit-content;
+}
+
+.btn-primary {
+  background-color: transparent;
+  border-color: $primary;
+  color: $primary;
+  border-width: medium;
+}
+
+.btn-primary:active, .btn-primary:focus, .btn-primary:hover {
+  background-color: $primary;
+  border-color: $primary;
+  color: white;
+}
+
+.btn-primary:active, .btn-primary:focus {
+  box-shadow: 0 0 0 0rem rgba(254, 209, 55, 0) !important;
+}
+
+.btn-secondary {
+  background-color: transparent;
+  border-color: $primary;
+  color: $primary;
+  border-width: small;
+}
+
+.btn-secondary:active, .btn-secondary:focus, .btn-secondary:hover {
+  background-color: $primary;
+  border-color: $primary;
+  color: white;
+}
+
+.btn-secondary:active, .btn-secondary:focus {
+  background-color: $primary;
+}
+
+.btn-secondary:not(:disabled):not(.disabled).active {
+  background-color: $primary;
+  border-color: $primary;
+  color: white;
+}
+
+::-moz-selection {
+  background: $primary;
+  text-shadow: none;
+}
+
+::selection {
+  background: $primary;
+  text-shadow: none;
+}
