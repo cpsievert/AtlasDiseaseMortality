@@ -934,7 +934,7 @@ server <- function(input, output, session) {
     d <- DX_incidence()
     validate(need(nrow(d) > 0, message = msg))
     d <- filter(d, sex %in% input$mrr_age_sex)
-    validate(need(nrow(d) > 0, message = msg))
+    validate(need(nrow(d) > 0 && any(!is.na(d$death_rate)), message = msg))
     d0 <- filter(incidence0, sex %in% input$mrr_age_sex)
 
     tidy_d <- . %>%
