@@ -323,7 +323,7 @@ ui <- function(request) {
   logo_img <- function(src, href = NULL, ...) {
     div(
       class = "col-lg-2 my-3 text-center",
-      a(href = href, img(class = "img-fluid", src = src, ...))
+      a(href = href, target="_blank", img(class = "img-fluid", src = src, ...))
     )
   }
 
@@ -376,11 +376,11 @@ ui <- function(request) {
       div(
         class="row justify-content-center",
         # TODO: paper link
-        a(class = "btn btn-primary btn-xl text-uppercase", href = "#", "Paper"),
-        a(class = "btn btn-primary btn-xl text-uppercase", href = "https://osf.io/zafhu", "Protocol"),
+        a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href = "#", "Paper"),
+        a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href = "https://osf.io/zafhu", "Protocol"),
         a(class = "btn btn-primary btn-xl text-uppercase", "data-bs-toggle"="modal", href="https://osf.io/zafhu", "Code and summary data"),
-        a(class="btn btn-primary btn-xl text-uppercase", href="mailto:j.mcgrath@uq.edu.au", "Contact"),
-        a(class="btn btn-primary btn-xl text-uppercase", href="https://www.nbepi.com", "Epi.com")
+        a(class="btn btn-primary btn-xl text-uppercase", target="_blank", href="mailto:j.mcgrath@uq.edu.au", "Contact"),
+        a(class="btn btn-primary btn-xl text-uppercase", target="_blank", href="https://www.nbepi.com", "nbepi.com")
       )
     )
   )
