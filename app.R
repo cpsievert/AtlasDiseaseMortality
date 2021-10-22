@@ -744,7 +744,7 @@ server <- function(input, output, session) {
 
     dx_mrr <- filter(DX_MRR(), cause %in% "All")
     dx_lyl <- filter(DX_LYL(), cause %in% "All")
-    # In some cases, it appears cause can be missing (e.g., Brucellosis)
+    # If MRR/LYL estimate are missing, cause will be missing
     if (nrow(dx_mrr) == 0) dx_mrr <- DX_MRR()
     if (nrow(dx_lyl) == 0) dx_lyl <- DX_LYL()
 
@@ -790,7 +790,10 @@ server <- function(input, output, session) {
 
     d <- filter(ages, id == input$disorder_id)
     validate(
-      need(nrow(d) > 0, message = "Estimates not available")
+      need(
+        nrow(d) > 0 && any(!is.na(d$dx)),
+        message = "Estimates of age at diagnosis are not available because there are less than 100 persons diagnosed."
+      )
     )
 
     g <- ggplot(d, aes(x = dx, y = pct)) +
@@ -821,7 +824,10 @@ server <- function(input, output, session) {
 
     d <- filter(ages, id == input$disorder_id)
     validate(
-      need(nrow(d) > 0, message = "Estimates not available")
+      need(
+        nrow(d) > 0 && any(!is.na(d$death)),
+        message = "Estimates of age at death are not available because there are less than 100 persons diagnosed who died during the study period."
+      )
     )
 
     g <- ggplot(d, aes(x = death, y = pct)) +
@@ -855,8 +861,16 @@ server <- function(input, output, session) {
 
     d <- incidence %>%
       filter(id %in% input$disorder_id) %>%
-      filter(age_group <= 95) %>%
-      mutate(
+      filter(age_group <= 95)
+
+    validate(
+      need(
+        nrow(d) > 0 && any(!is.na(d$dx_rate)),
+        message = "Estimates of incidence rates given age are not available because there are less than 100 persons diagnosed."
+      )
+    )
+
+    d <- mutate(d,
         dx_rate = 10000 * dx_rate,
         dx_rate_left = 10000 * dx_rate_left,
         dx_rate_right = 10000 * dx_rate_right,
@@ -900,6 +914,7 @@ server <- function(input, output, session) {
   })
 
   output$mrr_age_sex <- renderUI({
+    req(nrow(DX_incidence()) > 0)
     sexes <- unique(DX_incidence()$sex)
     drop <- selectInput("mrr_age_sex", NULL, sexes, selectize = FALSE, width = "fit-content")
     if (length(sexes) < 2) {
@@ -913,9 +928,15 @@ server <- function(input, output, session) {
   })
 
   output$mrr_age <- renderPlotly({
-    req(input$disorder_id, input$mrr_age_sex)
+    msg <- "Estimates of mortality rates and mortality rates ratios given age are not available because there are less than 100 diagnosed who died during the study period"
 
-    rates <- rbind(incidence0, DX_incidence()) %>%
+    d <- DX_incidence()
+    validate(need(nrow(d) > 0, message = msg))
+    validate(
+      need(nrow(filter(d, sex %in% input$mrr_age_sex)) > 0, message = msg)
+    )
+
+    rates <- rbind(incidence0, d) %>%
       filter(sex %in% input$mrr_age_sex) %>%
       mutate(
         id = ifelse(id == 0, 0, 1),
@@ -965,10 +986,6 @@ server <- function(input, output, session) {
         )
     }
 
-    validate(
-      need(nrow(rates) > 0, "No estimates available")
-    )
-
     mrr_by_age(rates, ratios) %>%
       show_customdata_offcanvas()
   })
@@ -980,6 +997,13 @@ server <- function(input, output, session) {
     lag <- DX_() %>%
       left_join(MRRlagged, by = c("id", "sex")) %>%
       filter(exposure != 0)
+
+    validate(
+      need(
+        nrow(lag) > 0 && any(!is.na(lag$est)),
+        message = "Estimates of mortality rate ratios given time since diagnosis are not available because there are less than 100 persons diagnosed who died during the study period."
+      )
+    )
 
     g1 <- ggplot(lag, aes(x = exposure, y = est)) +
       geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
@@ -1006,6 +1030,12 @@ server <- function(input, output, session) {
   })
 
   output$lyl_age <- renderPlotly({
+    validate(
+      need(
+        any(DX_()$LYL),
+        message = "Estimates of life expectancy at a given age are not available because there are insufficient number of cases."
+      )
+    )
 
     d0 <- mutate(lifeExp0, group = "Entire Danish population", ci = format_numbers(est, 1))
 
@@ -1075,6 +1105,8 @@ server <- function(input, output, session) {
   })
 
   output$survival_controls <- renderUI({
+    req(any(DX_()$LYL))
+
     survival <- DX_survival()
 
     ages <- distinct(survival, pct, age_specific)
@@ -1110,6 +1142,13 @@ server <- function(input, output, session) {
 
 
   output$survival <- renderPlotly({
+    validate(
+      need(
+        any(DX_()$LYL),
+        message = "Survival curves are not available because there are insufficient number of cases."
+      )
+    )
+
     survival <- DX_survival()
     req(input$age_survival)
 

@@ -245,7 +245,9 @@ cis_by_category <- function(data, ytitle, xtitle = NULL, ymin = NULL, yint = 1, 
 }
 
 mrr_by_age <- function(dat_rates, dat_ratios) {
-  rates <- ggplot() +
+  # Only display rates if we have the "with the disorder" estimate
+  rates <- if (any(!is.na(filter(dat_rates, id == 1)$death_rate))) {
+    ggplot() +
     geom_errorbar(
       data = highlight_key(dat_rates, ~age_group, "disorder_mrr"),
       aes(
@@ -265,8 +267,18 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
     xlab("Age in years") +
     ylab("Mortality rates (per 10,000 person-years)") +
     scale_y_log10()
+  } else {
+    plotly_empty() %>%
+      add_annotations(
+        text = "Estimates of mortality rates given age<br>are not available because there are less than 100<br>diagnosed who died during the study period",
+        x = 0.05, y = 0.5,
+        xanchor = "left",
+        xref = "paper", yref = "paper",
+        showarrow = FALSE
+      )
+  }
 
-  ratios <- if (nrow(dat_ratios) > 0) {
+  ratios <- if (nrow(dat_ratios) > 0 && any(!is.na(dat_ratios$est))) {
     ggplot() +
       geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
       geom_errorbar(
@@ -290,8 +302,9 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
   } else {
     plotly_empty() %>%
       add_annotations(
-        text = "Ratios available only for persons",
-        x = 0.5, y = 0.5,
+        text = "Estimates of mortality rate ratios given age<br>are not available because there are less than 100<br>diagnosed who died during the study period",
+        x = 0.95, y = 0.5,
+        xanchor = "right",
         xref = "paper", yref = "paper",
         showarrow = FALSE
       )
