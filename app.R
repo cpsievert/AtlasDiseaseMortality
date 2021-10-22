@@ -743,8 +743,10 @@ server <- function(input, output, session) {
     req(nrow(DX_MRR()) > 0)
 
     dx_mrr <- filter(DX_MRR(), cause %in% "All")
-    dx_lyl <- filter(DX_LYL(), cause %in% "All") %>%
-      select(id, sex, ci)
+    dx_lyl <- filter(DX_LYL(), cause %in% "All")
+    # In some cases, it appears cause can be missing (e.g., Brucellosis)
+    if (nrow(dx_mrr) == 0) dx_mrr <- DX_MRR()
+    if (nrow(dx_lyl) == 0) dx_lyl <- DX_LYL()
 
     dx_mrr %>%
       mutate(dx_death = format_ci(age_death50, age_death25, age_death75)) %>%
@@ -755,8 +757,9 @@ server <- function(input, output, session) {
         `Age at Death [Median (IQR)]` = dx_death,
         `Mortality Rate Ratio` = ci
       ) %>%
-      left_join(dx_lyl, by = c("id", "sex")) %>%
+      left_join(select(dx_lyl, id, sex, ci), by = c("id", "sex")) %>%
       select(-id) %>%
+      mutate(sex = tools::toTitleCase(sex)) %>%
       rename(Sex = sex, `Life Years Lost` = ci) %>%
       DT::datatable(
         rownames = FALSE,
@@ -801,7 +804,10 @@ server <- function(input, output, session) {
       ylab("Percentage diagnosed") +
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
       facet_grid(
-        ~factor(sex, levels = c("persons", "men", "women")),
+        ~factor(
+          tools::toTitleCase(as.character(sex)),
+          levels = c("Persons", "Men", "Women")
+        ),
         drop = TRUE
       )
 
@@ -829,7 +835,10 @@ server <- function(input, output, session) {
       ylab("Percentage deceased") +
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
       facet_grid(
-        ~factor(sex, levels = c("persons", "men", "women")),
+        ~factor(
+          tools::toTitleCase(as.character(sex)),
+          levels = c("Persons", "Men", "Women")
+        ),
         drop = TRUE
       )
 
@@ -872,7 +881,10 @@ server <- function(input, output, session) {
       ylab("Incidence rate (per 10,000 person-years)") +
       scale_x_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
       facet_grid(
-        ~factor(sex, levels = c("persons", "men", "women")),
+        ~factor(
+          tools::toTitleCase(as.character(sex)),
+          levels = c("Persons", "Men", "Women")
+        ),
         drop = TRUE
       )
 
@@ -975,7 +987,10 @@ server <- function(input, output, session) {
       geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.1) +
       geom_line(linetype = "dashed") +
       facet_wrap(
-        ~factor(sex, levels = c("persons", "men", "women")),
+        ~factor(
+          tools::toTitleCase(as.character(sex)),
+          levels = c("Persons", "Men", "Women")
+        ),
         ncol = 3, drop = TRUE
       ) +
       scale_x_continuous(breaks = 1:6, labels = c("0-6 months", "6-12 months", "1-2 years", "2-5 years", "5-10 years", "10+ years")) +
@@ -1014,7 +1029,13 @@ server <- function(input, output, session) {
         aes(label = text),
         alpha = 0
       ) +
-      facet_grid(~sex) +
+      facet_grid(
+        ~factor(
+          tools::toTitleCase(as.character(sex)),
+          levels = c("Persons", "Men", "Women")
+        ),
+        drop = TRUE
+      ) +
       xlab("Age in years") +
       ylab("Remaining life expectancy\nafter diagnosis (in years)")
 
@@ -1132,7 +1153,10 @@ server <- function(input, output, session) {
 
     g <- ggplot() +
       facet_wrap(
-        ~factor(sex, levels = c("persons", "men", "women")),
+        ~factor(
+          tools::toTitleCase(as.character(sex)),
+          levels = c("Persons", "Men", "Women")
+        ),
         drop = TRUE
       ) +
       xlab("Age in years") +
