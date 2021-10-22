@@ -17,9 +17,9 @@ DX <- read_table("data-raw/list_dx.txt") %>%
       TRUE ~ desc_EN
     ),
     dx_median = ifelse(
-      is.na(age_dx50), "-", paste0(format_numbers(age_dx50, 1), " (", format_numbers(age_dx25, 1), "-", format_numbers(age_dx75, 1), ")")),
+      is.na(age_dx50), " - ", paste0(format_numbers(age_dx50, 1), " (", format_numbers(age_dx25, 1), " - ", format_numbers(age_dx75, 1), ")")),
     death_median = ifelse(
-      is.na(age_death50), "-", paste0(format_numbers(age_death50, 1), " (", format_numbers(age_death25, 1), "-", format_numbers(age_death75, 1), ")"))
+      is.na(age_death50), " - ", paste0(format_numbers(age_death50, 1), " (", format_numbers(age_death25, 1), " - ", format_numbers(age_death75, 1), ")"))
   ) %>%
   mutate(sex = ifelse(sex == "All", "persons", ifelse(sex == "Males", "men", "women"))) %>%
   left_join(read_table("data-raw/labels.txt")) %>%
@@ -77,7 +77,7 @@ read_table("data-raw/MRRlagged.txt") %>%
     ),
     x = recode(exposure, !!!exposure_map),
     text = paste0(x, "<br>MRR = ", ci),
-    customdata = wrap(glue::glue("{x} after an initial diagnosis, the diagnosed had an average mortality rate of <b>{est_display}</b> compared to those of same age and sex without that diagnosis (MRR = {ci})"))
+    customdata = glue::glue("{x} after an initial diagnosis, the diagnosed had an average mortality rate <b>{est_display}</b> compared to those of same age and sex without that diagnosis (MRR = {ci})")
   ) %>%
   saveRDS("data/MRRlagged.rds")
 
