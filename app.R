@@ -933,12 +933,11 @@ server <- function(input, output, session) {
 
     d <- DX_incidence()
     validate(need(nrow(d) > 0, message = msg))
-    validate(
-      need(nrow(filter(d, sex %in% input$mrr_age_sex)) > 0, message = msg)
-    )
+    d <- filter(d, sex %in% input$mrr_age_sex)
+    validate(need(nrow(d) > 0, message = msg))
+    d0 <- filter(incidence0, sex %in% input$mrr_age_sex)
 
-    rates <- rbind(incidence0, d) %>%
-      filter(sex %in% input$mrr_age_sex) %>%
+    tidy_d <- . %>%
       mutate(
         id = ifelse(id == 0, 0, 1),
         death_rate_left = ifelse(id == 0, NA, death_rate_left),
@@ -948,7 +947,31 @@ server <- function(input, output, session) {
       mutate(
         death_rate = 10000 * death_rate,
         death_rate_left = 10000 * death_rate_left,
-        death_rate_right = 10000 * death_rate_right,
+        death_rate_right = 10000 * death_rate_right
+      )
+
+    d <- tidy_d(d) %>%
+      mutate(
+        customdata = glue::glue(
+        "If 10,000 {sex} of age {age_group}-{age_group+5} years <b>diagnosed with the disorder</b> are followed for one year after diagnosis, on average <b>{format_numbers(death_rate, 2)}</b> of them will die (IR = {format_numbers(death_rate, 2)} (95% CI: {format_numbers(death_rate_left, 2)}-{format_numbers(death_rate_right, 2)}))."
+      )
+    )
+
+    d0 <- tidy_d(d0) %>%
+      mutate(
+        customdata = glue::glue(
+        "If 10,000 {sex} of age {age_group}-{age_group+5} years in the general population are followed for one year, on average <b>{format_numbers(death_rate, 2)}</b> of them will die (IR = {format_numbers(death_rate, 2)})."
+      )
+    )
+
+    # When clicking on a particular rate (whether it is with/without disorder), show interpreation for both
+    d <- left_join(d, select(d0, sex, age_cat, cd = customdata))
+    d0 <- left_join(d0, select(d, sex, age_cat, cd = customdata))
+    d <- mutate(d, customdata = paste(customdata, "<br><br>", cd))
+    d0 <- mutate(d0, customdata = paste(customdata, "<br><br>", cd))
+
+    rates <- rbind(d0, d) %>%
+      mutate(
         color = ifelse(id == 1, "Diagnosed with the disorder", "Entire Danish population"),
         text = paste0(
           ifelse(
@@ -957,15 +980,9 @@ server <- function(input, output, session) {
             ""
           ),
           format_ci(death_rate, death_rate_left, death_rate_right, n = 1)
-        ),
-        customdata = glue::glue(
-          "If 10,000 {sex} of age {age_group}-{age_group+5} years  {ifelse(id == 1, 'diagnosed with the disorder', 'in the general population')} are followed for one year{ifelse(id == 1, ' after diagnosis', '')}, on average <b>{format_numbers(death_rate, 2)}</b> of them will die (IR = {format_numbers(death_rate, 2)}"
-        ),
-        customdata = paste0(
-          customdata,
-          ifelse(id == 1, glue::glue(" (95% CI: {format_numbers(death_rate_left, 2)}-{format_numbers(death_rate_right, 2)}))"), ")")
         )
       )
+
 
     ratios <- filter(MRRage_(), sex %in% input$mrr_age_sex)
 
