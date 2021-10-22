@@ -220,6 +220,7 @@ ui <- function(request) {
           "disorder_id", NULL,
           c("Search for a disorder" = "", setNames(disorders$id, disorders$description)),
           options = list(
+            maxOptions = 2000,
             score = I(sprintf("function(search) {
               var score = this.getScoreFunction(search);
               var gmc_ids = %s;
