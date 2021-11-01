@@ -244,7 +244,7 @@ cis_by_category <- function(data, ytitle, xtitle = NULL, ymin = NULL, yint = 1, 
   p
 }
 
-mrr_by_age <- function(dat_rates, dat_ratios) {
+mrr_by_age <- function(dat_rates, dat_ratios, sexes) {
   # Only display rates if we have the "with the disorder" estimate
   rates <- ggplot() +
     geom_errorbar(
@@ -291,7 +291,11 @@ mrr_by_age <- function(dat_rates, dat_ratios) {
   } else {
     plotly_empty() %>%
       add_annotations(
-        text = "Estimates of mortality rate ratios given age<br>are not available because there are less than 100<br>diagnosed who died during the study period",
+        text = paste0(
+          "Estimates of mortality rate ratios given age<br>",
+          "are only available for ",
+          glue::glue_collapse(sexes, sep = ", ", last = " and ")
+        ),
         x = 0.5, y = 0.5,
         xanchor = "center",
         xref = "paper", yref = "paper",

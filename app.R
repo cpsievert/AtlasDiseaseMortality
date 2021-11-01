@@ -1004,7 +1004,9 @@ server <- function(input, output, session) {
         )
     }
 
-    mrr_by_age(rates, ratios) %>%
+    sexes <- unique(MRRage_()$sex)
+
+    mrr_by_age(rates, ratios, sexes) %>%
       show_customdata_offcanvas()
   })
 
