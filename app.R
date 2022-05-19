@@ -141,7 +141,12 @@ ui <- function(request) {
       h2(
         class = "mt-4 text-center",
         style = "width: 100%; max-width: 900px; margin-left:auto; margin-right:auto",
-        "An analysis of mortality metrics associated with a comprehensive range of disorders: the Danish atlas of disease mortality"
+        "The Danish Atlas of Disease Mortality"
+      ),
+      h5(
+        class = "mt-2 text-center text-muted lead",
+        style = "width: 100%; max-width: 550px; margin-left:auto; margin-right:auto",
+        "Analysis of mortality metrics associated with a comprehensive range of disorders in Denmark, 2000-2018"
       ),
       hr(style = "width: 100%; max-width: 600px", class = "mx-auto"),
       div(
@@ -364,7 +369,7 @@ ui <- function(request) {
         class = "lead my-5",
         style = "width: 100%; max-width: 800px; margin-left:auto; margin-right:auto",
         "This website aims to provide more information on our scientific publication in ",
-        "TO BE DETERMINED.",
+        "PLOS Medicine.",
         #"The study was ", a(
         #  "pre-registered at ClinicalTrials.gov. ",
         #  href = "https://clinicaltrials.gov/ct2/show/NCT03847753"
@@ -372,14 +377,14 @@ ui <- function(request) {
         "See the links below for information about this study (i.e., scientific publication, pre-registered protocol, code, and aggregated summary data), ",
         "our contact information, and more about our work on psychiatric  epidemiology at ",
         a(href = "https://www.nbepi.com", "nbepi.com", .noWS = "after"),
-        ". To cite the paper use TO BE DETERMINED."
+        ". To cite the paper use Plana-Ripoll et al. Analysis of mortality metrics associated with a comprehensive range of disorder in Denmark, 2000-2018: A population-based cohort study. PLOS Medicine, 2022."
       ),
       div(
         class="row justify-content-center",
         # TODO: paper link
         a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href = "#", "Paper"),
         a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href = "https://osf.io/zafhu", "Protocol"),
-        a(class = "btn btn-primary btn-xl text-uppercase", "data-bs-toggle"="modal", href="https://osf.io/zafhu", "Code and summary data"),
+        a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href="https://osf.io/zafhu", "Code and summary data"),
         a(class="btn btn-primary btn-xl text-uppercase", target="_blank", href="mailto:j.mcgrath@uq.edu.au", "Contact"),
         a(class="btn btn-primary btn-xl text-uppercase", target="_blank", href="https://www.nbepi.com", "nbepi.com")
       )
