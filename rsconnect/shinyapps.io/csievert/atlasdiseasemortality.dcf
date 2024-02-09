@@ -5,7 +5,5 @@ account: csievert
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 4386321
-bundleId: 5921378
+bundleId: 8239225
 url: https://csievert.shinyapps.io/atlasdiseasemortality/
-when: 1652923058.80504
-lastSyncTime: 1652923058.80506

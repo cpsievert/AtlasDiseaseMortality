@@ -377,14 +377,13 @@ ui <- function(request) {
         "See the links below for information about this study (i.e., scientific publication, pre-registered protocol, code, and aggregated summary data), ",
         "our contact information, and more about our work on psychiatric  epidemiology at ",
         a(href = "https://www.nbepi.com", "nbepi.com", .noWS = "after"),
-        ". To cite the paper use Plana-Ripoll et al. Analysis of mortality metrics associated with a comprehensive range of disorder in Denmark, 2000-2018: A population-based cohort study. PLOS Medicine, 2022."
+        HTML('. To cite the paper use "Plana-Ripoll <i>et al</i>. (2022) Analysis of mortality metrics associated with a comprehensive range of disorder in Denmark, 2000-2018: A population-based cohort study. PLoS Med 19(6): e1004023".')
       ),
       div(
         class="row justify-content-center",
-        # TODO: paper link
-        a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href = "#", "Paper"),
-        a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href = "https://osf.io/zafhu", "Protocol"),
-        a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href="https://osf.io/zafhu", "Code and summary data"),
+        a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href = "https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1004023", "Paper"),
+        a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href = "https://osf.io/zafhu", "Protocol & Summary data"),
+        a(class = "btn btn-primary btn-xl text-uppercase", target="_blank", href="https://github.com/cpsievert/AtlasDiseaseMortality", "Source code"),
         a(class="btn btn-primary btn-xl text-uppercase", target="_blank", href="mailto:j.mcgrath@uq.edu.au", "Contact"),
         a(class="btn btn-primary btn-xl text-uppercase", target="_blank", href="https://www.nbepi.com", "nbepi.com")
       )
